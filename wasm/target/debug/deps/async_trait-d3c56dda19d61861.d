@@ -1,0 +1,12 @@
+F:\abc\111111\wasm\target\debug\deps\async_trait-d3c56dda19d61861.d: C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\lib.rs C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\args.rs C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\bound.rs C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\expand.rs C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\lifetime.rs C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\parse.rs C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\receiver.rs C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\verbatim.rs
+
+F:\abc\111111\wasm\target\debug\deps\async_trait-d3c56dda19d61861.dll: C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\lib.rs C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\args.rs C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\bound.rs C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\expand.rs C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\lifetime.rs C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\parse.rs C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\receiver.rs C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\verbatim.rs
+
+C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\lib.rs:
+C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\args.rs:
+C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\bound.rs:
+C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\expand.rs:
+C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\lifetime.rs:
+C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\parse.rs:
+C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\receiver.rs:
+C:\Users\phk\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\async-trait-0.1.89\src\verbatim.rs:

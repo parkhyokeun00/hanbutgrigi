@@ -1,0 +1,2072 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>한붓그리기 크로키 (Focus Edition)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        canvas {
+            touch-action: none;
+        }
+
+        .slider-thumb::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #4f46e5;
+            cursor: pointer;
+        }
+
+        .disabled-slider {
+            opacity: 0.5;
+            pointer-events: none;
+            cursor: not-allowed;
+        }
+
+        video {
+            display: none;
+        }
+
+        .color-chip {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            transition: transform 0.1s;
+            position: relative;
+        }
+
+        .color-chip:hover {
+            transform: scale(1.1);
+        }
+
+        .color-chip::after {
+            content: '×';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 14px;
+            opacity: 0;
+            text-shadow: 0 0 2px black;
+        }
+
+        .color-chip:hover::after {
+            opacity: 1;
+        }
+
+        /* 오버레이 캔버스 스타일 (가이드용) */
+        #overlayCanvas {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            /* 기본적으로는 클릭 통과, 편집 모드에서만 활성 */
+            z-index: 10;
+        }
+
+        .edit-mode #overlayCanvas {
+            pointer-events: auto;
+            cursor: crosshair;
+        }
+    </style>
+</head>
+
+<body class="h-screen flex flex-col items-center justify-center p-4">
+
+    <div
+        class="bg-white rounded-xl shadow-xl w-full max-w-6xl h-full max-h-[95vh] flex flex-col md:flex-row overflow-hidden">
+
+        <div
+            class="w-full md:w-96 bg-gray-50 p-5 flex flex-col gap-5 border-r border-gray-200 overflow-y-auto z-10 custom-scrollbar">
+            <h1 class="text-2xl font-bold text-gray-800">🎨 한붓 크로키 <span
+                    class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded ml-2">Focus</span></h1>
+            <p class="text-xs text-gray-500">이미지, 오디오, 동영상을 나만의 색상과 스타일로 표현하세요.</p>
+
+            <div class="relative group">
+                <input type="file" id="mediaInput" accept="image/*, audio/*, video/*" class="hidden">
+                <label for="mediaInput"
+                    class="block w-full text-center px-4 py-3 bg-indigo-600 text-white rounded-lg cursor-pointer hover:bg-indigo-700 transition font-medium shadow-md">
+                    📂 미디어 소스 업로드
+                </label>
+                <p id="fileName" class="text-[10px] text-center text-gray-400 mt-2 truncate px-2">선택된 파일 없음</p>
+            </div>
+
+            <div class="space-y-4 pt-2 border-t border-gray-200">
+                <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">🔍 디테일 강조 설정</h2>
+                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-sm font-semibold text-gray-700">영역 편집</label>
+                        <button id="toggleFocusBtn"
+                            class="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded transition">편집 켜기</button>
+                    </div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-xs text-gray-600">가이드 보기</label>
+                        <input type="checkbox" id="showGuidesCheck" checked class="w-4 h-4 text-indigo-600 rounded">
+                    </div>
+                    <p class="text-[10px] text-gray-500 mb-2 leading-tight">
+                        * 클릭: 추가 (최대 10개)<br>
+                        * 드래그: 이동 / 휠: 크기 조절<br>
+                        * 우클릭: 삭제
+                    </p>
+                    <button id="clearZonesBtn"
+                        class="w-full text-xs bg-red-50 text-red-500 border border-red-100 hover:bg-red-100 px-2 py-1.5 rounded transition">
+                        모든 영역 삭제
+                    </button>
+                </div>
+            </div>
+
+            <div class="space-y-4 pt-2 border-t border-gray-200">
+                <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">라인 설정</h2>
+
+                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                    <label class="text-sm font-semibold text-gray-700 flex justify-between">
+                        <span>상세함 (점 개수)</span>
+                        <span id="detailVal" class="text-indigo-600 font-bold">2500</span>
+                    </label>
+                    <input type="range" id="detailSlider" min="500" max="150000" step="100" value="2500"
+                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-2">
+                </div>
+
+                <!-- Edge Detection Mode Selector (NEW) -->
+                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                    <label class="text-sm font-semibold text-gray-700 mb-2 block">엣지 검출 방식</label>
+                    <select id="edgeModeSelect"
+                        class="bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2">
+                        <option value="basic">기본 (Basic)</option>
+                        <option value="sobel">Sobel 필터 (정밀)</option>
+                        <option value="sobel_fine">Sobel 초정밀 (Finest)</option>
+                    </select>
+                    <p class="text-[10px] text-gray-400 mt-1">* Sobel: 더 정확한 윤곽선 검출</p>
+                </div>
+
+                <!-- Drawing Style Selector (NEW) -->
+                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm mt-4">
+                    <label class="text-sm font-semibold text-gray-700 mb-2 block">그리기 스타일</label>
+                    <select id="drawStyleSelect"
+                        class="bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2">
+                        <option value="standard">기본 (Standard)</option>
+                        <option value="watercolor">수채화 (Watercolor)</option>
+                        <option value="drawing">그리기 (Sketch)</option>
+                        <option value="realistic">사실적인 (Realistic)</option>
+                    </select>
+                </div>
+
+                <!-- Watercolor Options Panel (NEW) -->
+                <div id="watercolorOptions" class="bg-white p-3 rounded-lg border border-indigo-200 shadow-sm hidden">
+                    <h3 class="text-xs font-bold text-indigo-600 mb-3">🎨 수채화 옵션</h3>
+
+                    <!-- 브러시 설정 -->
+                    <p class="text-[10px] text-gray-400 mb-2 border-b pb-1">🖌️ 브러시</p>
+                    <div class="space-y-2 mb-3">
+                        <div>
+                            <label class="text-xs font-medium text-gray-600 flex justify-between">
+                                <span>붓 크기</span>
+                                <span id="wcBrushSizeVal" class="text-indigo-600">4</span>
+                            </label>
+                            <input type="range" id="wcBrushSize" min="1" max="20" value="4"
+                                class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1">
+                        </div>
+
+                        <div>
+                            <label class="text-xs font-medium text-gray-600 flex justify-between">
+                                <span>물 양</span>
+                                <span id="wcWaterVal" class="text-indigo-600">2.0</span>
+                            </label>
+                            <input type="range" id="wcWater" min="0.5" max="5" step="0.1" value="2.0"
+                                class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1">
+                        </div>
+
+                        <div>
+                            <label class="text-xs font-medium text-gray-600 flex justify-between">
+                                <span>안료 농도</span>
+                                <span id="wcPigmentVal" class="text-indigo-600">0.15</span>
+                            </label>
+                            <input type="range" id="wcPigment" min="0.01" max="0.5" step="0.01" value="0.15"
+                                class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1">
+                        </div>
+                    </div>
+
+                    <!-- 물리 엔진 설정 -->
+                    <p class="text-[10px] text-gray-400 mb-2 border-b pb-1">🌊 유체 물리</p>
+                    <div class="space-y-2 mb-3">
+                        <div>
+                            <label class="text-xs font-medium text-gray-600 flex justify-between">
+                                <span>점성 (Viscosity)</span>
+                                <span id="wcViscosityVal" class="text-indigo-600">0.05</span>
+                            </label>
+                            <input type="range" id="wcViscosity" min="0" max="0.5" step="0.01" value="0.05"
+                                class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1">
+                        </div>
+
+                        <div>
+                            <label class="text-xs font-medium text-gray-600 flex justify-between">
+                                <span>수압 (Pressure)</span>
+                                <span id="wcPressureVal" class="text-indigo-600">5.0</span>
+                            </label>
+                            <input type="range" id="wcPressure" min="0.5" max="15" step="0.5" value="5.0"
+                                class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1">
+                        </div>
+
+                        <div>
+                            <label class="text-xs font-medium text-gray-600 flex justify-between">
+                                <span>증발 속도</span>
+                                <span id="wcEvapVal" class="text-indigo-600">0.002</span>
+                            </label>
+                            <input type="range" id="wcEvap" min="0.0001" max="0.01" step="0.0001" value="0.002"
+                                class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1">
+                        </div>
+
+                        <div>
+                            <label class="text-xs font-medium text-gray-600 flex justify-between">
+                                <span>물리 정밀도</span>
+                                <span id="wcIterVal" class="text-indigo-600">10</span>
+                            </label>
+                            <input type="range" id="wcIter" min="2" max="30" step="1" value="10"
+                                class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1">
+                        </div>
+                    </div>
+
+                    <!-- 안료 거동 설정 -->
+                    <p class="text-[10px] text-gray-400 mb-2 border-b pb-1">🧪 안료 거동</p>
+                    <div class="space-y-2 mb-3">
+                        <div>
+                            <label class="text-xs font-medium text-gray-600 flex justify-between">
+                                <span>흡착력 (Adhesion)</span>
+                                <span id="wcAdhesionVal" class="text-indigo-600">0.05</span>
+                            </label>
+                            <input type="range" id="wcAdhesion" min="0.001" max="0.3" step="0.001" value="0.05"
+                                class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1">
+                        </div>
+
+                        <div>
+                            <label class="text-xs font-medium text-gray-600 flex justify-between">
+                                <span>과립화 (Granulation)</span>
+                                <span id="wcGranularityVal" class="text-indigo-600">0.8</span>
+                            </label>
+                            <input type="range" id="wcGranularity" min="0" max="2" step="0.1" value="0.8"
+                                class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1">
+                        </div>
+                    </div>
+
+                    <!-- 해상도 설정 -->
+                    <p class="text-[10px] text-gray-400 mb-2 border-b pb-1">📐 렌더링</p>
+                    <div class="space-y-2 mb-3">
+                        <div>
+                            <label class="text-xs font-medium text-gray-600 flex justify-between">
+                                <span>해상도</span>
+                                <span id="wcResolutionVal" class="text-indigo-600">400</span>
+                            </label>
+                            <input type="range" id="wcResolution" min="200" max="1200" step="100" value="400"
+                                class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1">
+                            <p class="text-[9px] text-gray-400 mt-1">높을수록 선명 (성능 ↓)</p>
+                        </div>
+                    </div>
+
+                    <!-- 종이 질감 토글 -->
+                    <div class="flex items-center justify-between pt-2 border-t">
+                        <span class="text-xs font-medium text-gray-600">종이 질감 표시</span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="wcShowTexture" class="sr-only peer" checked>
+                            <div
+                                class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600">
+                            </div>
+                        </label>
+                    </div>
+
+                    <p class="text-[10px] text-gray-400 mt-2">* 변경 시 다시 그리기가 필요합니다</p>
+                </div>
+
+                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                    <div class="flex flex-col mb-2">
+                        <label class="text-sm font-semibold text-gray-700 mb-1">스무딩 방식</label>
+                        <select id="algoSelect"
+                            class="bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2">
+                            <option value="gaussian">가우시안 (부드럽게)</option>
+                            <option value="spline">스플라인 (매끄럽게)</option>
+                            <option value="quadratic">2차 베지에 (곡선)</option>
+                            <option value="rectilinear">직각 (Rectilinear)</option>
+                        </select>
+                    </div>
+                    <label class="text-sm font-semibold text-gray-700 flex justify-between mt-2">
+                        <span id="smoothLabel">강도</span>
+                        <span id="smoothVal" class="text-indigo-600">3단계</span>
+                    </label>
+                    <input type="range" id="smoothSlider" min="0" max="10" step="1" value="3"
+                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-2">
+                    <p class="text-[10px] text-gray-400 mt-1" id="smoothDesc">* 값이 클수록 선이 단순해집니다.</p>
+                </div>
+
+                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                    <label class="text-sm font-semibold text-gray-700 flex justify-between">
+                        <span>붓 떼기 임계값</span>
+                        <span id="splitVal" class="text-indigo-600">150px</span>
+                    </label>
+                    <input type="range" id="splitSlider" min="50" max="500" value="150"
+                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-2">
+                </div>
+            </div>
+
+            <div class="space-y-4 pt-2 border-t border-gray-200">
+                <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">색상 & 스타일</h2>
+
+                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between">
+                    <label class="text-sm font-semibold text-gray-700">배경색</label>
+                    <div class="flex items-center gap-2">
+                        <input type="color" id="bgColorInput" value="#ffffff"
+                            class="w-8 h-8 rounded cursor-pointer border-0 p-0">
+                        <span id="bgColorHex" class="text-xs text-gray-500 font-mono">#ffffff</span>
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                    <label class="text-sm font-semibold text-gray-700 mb-2 block">선 색상 모드</label>
+                    <select id="colorModeSelect"
+                        class="bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2 mb-3">
+                        <option value="single">단색 (검정/지정)</option>
+                        <option value="original">원본 색상 (소스)</option>
+                        <option value="tritone">트라이톤 (3색 지정)</option>
+                        <option value="palette">커스텀 파레트 (이미지 추출)</option>
+                    </select>
+
+                    <div id="singleColorOptions" class="hidden"></div>
+
+                    <div id="tritoneOptions" class="hidden space-y-2 mt-2">
+                        <div class="flex items-center justify-between"><span class="text-xs">어두운 톤</span> <input
+                                type="color" id="triShadow" value="#2d3748" class="w-6 h-6"></div>
+                        <div class="flex items-center justify-between"><span class="text-xs">중간 톤</span> <input
+                                type="color" id="triMid" value="#4299e1" class="w-6 h-6"></div>
+                        <div class="flex items-center justify-between"><span class="text-xs">밝은 톤</span> <input
+                                type="color" id="triHigh" value="#fbd38d" class="w-6 h-6"></div>
+                    </div>
+
+                    <div id="paletteOptions" class="hidden mt-2">
+                        <div class="mb-2">
+                            <input type="file" id="paletteImgInput" accept="image/*" class="hidden">
+                            <label for="paletteImgInput"
+                                class="block w-full text-center px-2 py-1.5 bg-gray-200 text-gray-700 text-xs rounded cursor-pointer hover:bg-gray-300 transition">
+                                🖼️ 색상 추출용 이미지 업로드
+                            </label>
+                        </div>
+                        <div id="paletteContainer"
+                            class="flex flex-wrap gap-2 mt-2 min-h-[24px] bg-gray-50 p-2 rounded border border-dashed border-gray-300">
+                            <span class="text-[10px] text-gray-400 w-full text-center">이미지를 올리면 색상이 추출됩니다.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                    <label class="text-sm font-semibold text-gray-700 flex justify-between">
+                        <span>유령 선 투명도</span>
+                        <span id="ghostVal" class="text-indigo-600">10%</span>
+                    </label>
+                    <input type="range" id="ghostSlider" min="0" max="100" value="10"
+                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-2">
+                </div>
+            </div>
+
+            <div class="space-y-4 pt-2 border-t border-gray-200">
+                <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">재생 & 렌더링</h2>
+
+                <div id="playbackSpeedControl" class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm hidden">
+                    <label class="text-sm font-semibold text-gray-700 flex justify-between">
+                        <span>동영상 재생 속도</span>
+                        <span id="playbackRateVal" class="text-indigo-600">1.0x</span>
+                    </label>
+                    <input type="range" id="playbackRateSlider" min="0.1" max="2.0" step="0.1" value="1.0"
+                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-2">
+                </div>
+
+                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-sm font-semibold text-gray-700">그리기 속도</label>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="instantCheck"
+                                class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                            <label for="instantCheck" class="ml-2 text-xs text-gray-600 font-medium">즉시 완료</label>
+                        </div>
+                    </div>
+                    <div id="speedControlArea">
+                        <div class="flex justify-between">
+                            <span id="speedVal" class="text-indigo-600 text-xs">보통</span>
+                        </div>
+                        <input type="range" id="speedSlider" min="1" max="50" value="5"
+                            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1">
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-auto pt-4 border-t border-gray-200 pb-10">
+                <button id="togglePlayBtn"
+                    class="w-full px-4 py-2 bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-200 transition font-medium mb-2 hidden">
+                    ⏯️ 비디오 재생/정지
+                </button>
+                <div class="flex gap-2 mb-2">
+                    <button id="redrawBtn"
+                        class="flex-1 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium">
+                        🔄 다시 그리기
+                    </button>
+                    <button id="downloadBtn"
+                        class="flex-1 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition font-medium">
+                        💾 저장
+                    </button>
+                </div>
+                <div id="stats" class="text-xs text-gray-400 text-center">
+                    대기 중...
+                </div>
+            </div>
+        </div>
+
+        <div class="flex-1 bg-gray-200 relative flex items-center justify-center overflow-hidden p-4"
+            id="canvasContainer">
+            <canvas id="mainCanvas" class="bg-white shadow-lg max-w-full max-h-full object-contain"></canvas>
+            <canvas id="overlayCanvas"></canvas>
+
+            <canvas id="hiddenCanvas" class="hidden"></canvas>
+            <canvas id="paletteCanvas" class="hidden"></canvas>
+            <video id="sourceVideo" class="hidden" playsinline loop muted></video>
+
+            <div id="loadingOverlay"
+                class="absolute inset-0 bg-white/80 flex items-center justify-center z-20 hidden backdrop-blur-sm">
+                <div class="text-center">
+                    <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-2"></div>
+                    <p id="loadingText" class="text-sm text-gray-600 font-medium">준비 중...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 0. Watercolor Engine (Ported from React) ---
+        class WatercolorEngine {
+            constructor(gridSize = 200, scale = 3) {
+                this.GRID_SIZE = gridSize;
+                this.SCALE = scale;
+                // CMY Pigments for Subtractive Mixing - Rebalanced to prevent yellow mudding
+                // Lower yellow absorption, higher cyan/magenta strength
+                this.PIGMENTS = {
+                    Cyan: { k: [1.8, 0.05, 0.05], s: [0.15, 0.5, 0.5] },  // Strong Red absorption
+                    Magenta: { k: [0.05, 1.8, 0.05], s: [0.5, 0.15, 0.5] },  // Strong Green absorption
+                    Yellow: { k: [0.02, 0.02, 1.5], s: [0.5, 0.5, 0.1] }    // Weaker Blue absorption
+                };
+
+                this.initMemory();
+            }
+
+            initMemory() {
+                this.brush = { size: 4, water: 2.0, pigment: 0.15 };
+                this.physics = {
+                    dt: 0.15,
+                    evaporation: 0.002,
+                    viscosity: 0.05,
+                    pressure: 5.0,
+                    iterations: 10,
+                };
+                this.pigmentProps = {
+                    adhesion: 0.05,
+                    granularity: 0.8,
+                    staining: 0.5,
+                };
+                this.showTexture = true; // Paper texture visibility
+
+                this.h = new Float32Array(this.GRID_SIZE * this.GRID_SIZE);
+                this.u = new Float32Array(this.GRID_SIZE * this.GRID_SIZE);
+                this.v = new Float32Array(this.GRID_SIZE * this.GRID_SIZE);
+                this.p = new Float32Array(this.GRID_SIZE * this.GRID_SIZE);
+                this.g = {
+                    Cyan: new Float32Array(this.GRID_SIZE * this.GRID_SIZE),
+                    Magenta: new Float32Array(this.GRID_SIZE * this.GRID_SIZE),
+                    Yellow: new Float32Array(this.GRID_SIZE * this.GRID_SIZE),
+                };
+                this.d = {
+                    Cyan: new Float32Array(this.GRID_SIZE * this.GRID_SIZE),
+                    Magenta: new Float32Array(this.GRID_SIZE * this.GRID_SIZE),
+                    Yellow: new Float32Array(this.GRID_SIZE * this.GRID_SIZE),
+                };
+                this.paperH = new Float32Array(this.GRID_SIZE * this.GRID_SIZE);
+                this.mask = new Float32Array(this.GRID_SIZE * this.GRID_SIZE);
+                this.initPaper();
+            }
+
+            resize(newSize) {
+                if (this.GRID_SIZE === newSize) return;
+                this.GRID_SIZE = newSize;
+                this.initMemory();
+            }
+
+            initPaper() {
+                for (let i = 0; i < this.GRID_SIZE; i++) {
+                    for (let j = 0; j < this.GRID_SIZE; j++) {
+                        const idx = i * this.GRID_SIZE + j;
+                        this.paperH[idx] = Math.random() * 0.4 + Math.sin(i * 0.15) * 0.05 + Math.cos(j * 0.15) * 0.05;
+                    }
+                }
+            }
+
+            reset() {
+                this.h.fill(0); this.u.fill(0); this.v.fill(0); this.p.fill(0); this.mask.fill(0);
+                Object.keys(this.PIGMENTS).forEach(p => { this.g[p].fill(0); this.d[p].fill(0); });
+            }
+
+            updateVelocities() {
+                const friction = 1.0 - this.physics.viscosity;
+                for (let i = 1; i < this.GRID_SIZE - 1; i++) {
+                    for (let j = 1; j < this.GRID_SIZE - 1; j++) {
+                        const idx = i * this.GRID_SIZE + j;
+                        const dhdx = (this.h[idx + 1] + this.paperH[idx + 1]) - (this.h[idx - 1] + this.paperH[idx - 1]);
+                        const dhdy = (this.h[idx + this.GRID_SIZE] + this.paperH[idx + this.GRID_SIZE]) - (this.h[idx - this.GRID_SIZE] + this.paperH[idx - this.GRID_SIZE]);
+                        this.u[idx] += -1.5 * dhdx * this.physics.dt;
+                        this.v[idx] += -1.5 * dhdy * this.physics.dt;
+                        this.u[idx] *= friction;
+                        this.v[idx] *= friction;
+                    }
+                }
+            }
+
+            relaxDivergence() {
+                for (let iter = 0; iter < this.physics.iterations; iter++) {
+                    for (let i = 1; i < this.GRID_SIZE - 1; i++) {
+                        for (let j = 1; j < this.GRID_SIZE - 1; j++) {
+                            const idx = i * this.GRID_SIZE + j;
+                            const div = (this.u[idx + 1] - this.u[idx - 1] + this.v[idx + this.GRID_SIZE] - this.v[idx - this.GRID_SIZE]) * 0.5;
+                            this.p[idx] -= div * this.physics.pressure;
+                            if (this.h[idx] > 0.01) {
+                                this.p[idx] -= this.physics.evaporation * (1.0 - this.mask[idx]) * 5.0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            moveFluid() {
+                const nextH = new Float32Array(this.GRID_SIZE * this.GRID_SIZE);
+                const nextG = {
+                    Cyan: new Float32Array(this.GRID_SIZE * this.GRID_SIZE),
+                    Magenta: new Float32Array(this.GRID_SIZE * this.GRID_SIZE),
+                    Yellow: new Float32Array(this.GRID_SIZE * this.GRID_SIZE),
+                };
+
+                for (let i = 1; i < this.GRID_SIZE - 1; i++) {
+                    for (let j = 1; j < this.GRID_SIZE - 1; j++) {
+                        const idx = i * this.GRID_SIZE + j;
+                        if (this.h[idx] <= 0) continue;
+
+                        const prevI = Math.max(0, Math.min(this.GRID_SIZE - 1, i - this.u[idx] * this.physics.dt));
+                        const prevJ = Math.max(0, Math.min(this.GRID_SIZE - 1, j - this.v[idx] * this.physics.dt));
+                        const prevIdx = Math.round(prevI) * this.GRID_SIZE + Math.round(prevJ);
+
+                        nextH[idx] = this.h[prevIdx] * (1 - this.physics.evaporation);
+                        Object.keys(nextG).forEach(p => {
+                            nextG[p][idx] = this.g[p][prevIdx];
+                        });
+                    }
+                }
+                this.h.set(nextH);
+                Object.keys(nextG).forEach(p => this.g[p].set(nextG[p]));
+            }
+
+            deposition() {
+                Object.keys(this.PIGMENTS).forEach(name => {
+                    const g = this.g[name];
+                    const d = this.d[name];
+                    for (let i = 0; i < g.length; i++) {
+                        if (this.h[i] < 0.01) continue;
+                        const speed = Math.sqrt(this.u[i] ** 2 + this.v[i] ** 2);
+                        const depRate = this.pigmentProps.adhesion * (1.0 / (speed + 1.0)) * (1.0 + this.pigmentProps.granularity * (1.0 - this.paperH[i]));
+                        const amount = g[i] * depRate * this.physics.dt;
+                        d[i] += amount;
+                        g[i] -= amount;
+                    }
+                });
+            }
+
+            applyBrush(x, y, colorStr = '#222222') {
+                if (x < 0 || x >= this.GRID_SIZE || y < 0 || y >= this.GRID_SIZE) return;
+
+                // Normalize RGB from color string
+                let r = 0, g = 0, b = 0;
+                if (colorStr.startsWith('#')) {
+                    const hex = colorStr.replace('#', '');
+                    if (hex.length === 6) {
+                        r = parseInt(hex.substring(0, 2), 16) / 255;
+                        g = parseInt(hex.substring(2, 4), 16) / 255;
+                        b = parseInt(hex.substring(4, 6), 16) / 255;
+                    } else { r = 0; g = 0; b = 0; }
+                } else if (colorStr.startsWith('rgb')) {
+                    const match = colorStr.match(/\d+/g);
+                    if (match && match.length >= 3) {
+                        r = parseInt(match[0]) / 255;
+                        g = parseInt(match[1]) / 255;
+                        b = parseInt(match[2]) / 255;
+                    }
+                }
+
+                // RGB to CMY
+                const c = Math.max(0, 1 - r);
+                const m = Math.max(0, 1 - g);
+                const yVal = Math.max(0, 1 - b);
+
+                for (let i = -this.brush.size; i <= this.brush.size; i++) {
+                    for (let j = -this.brush.size; j <= this.brush.size; j++) {
+                        const targetX = x + i;
+                        const targetY = y + j;
+                        if (targetX >= 0 && targetX < this.GRID_SIZE && targetY >= 0 && targetY < this.GRID_SIZE) {
+                            const idx = targetY * this.GRID_SIZE + targetX;
+                            const dist = Math.sqrt(i * i + j * j);
+                            if (dist <= this.brush.size) {
+                                const factor = 1 - dist / this.brush.size;
+                                this.h[idx] += this.brush.water * factor;
+                                this.mask[idx] = 1.0;
+
+                                // Deposition of CMY
+                                this.g['Cyan'][idx] += c * this.brush.pigment * factor;
+                                this.g['Magenta'][idx] += m * this.brush.pigment * factor;
+                                this.g['Yellow'][idx] += yVal * this.brush.pigment * factor;
+                            }
+                        }
+                    }
+                }
+            }
+
+            step() {
+                this.updateVelocities();
+                this.relaxDivergence();
+                this.moveFluid();
+                this.deposition();
+            }
+
+            render(ctx, width, height) {
+                const imageData = ctx.createImageData(this.GRID_SIZE, this.GRID_SIZE);
+
+                for (let i = 0; i < this.GRID_SIZE * this.GRID_SIZE; i++) {
+                    const idx = i * 4;
+
+                    // Start with paper white reflectance
+                    let reflectance = [1.0, 1.0, 1.0];
+
+                    // Apply each pigment layer using Kubelka-Munk
+                    Object.keys(this.PIGMENTS).forEach(name => {
+                        const pig = this.PIGMENTS[name];
+                        const thickness = this.d[name][i] * 4.0; // Reduced multiplier to prevent over-saturation
+                        if (thickness < 0.0005) return;
+
+                        for (let c = 0; c < 3; c++) {
+                            const K = pig.k[c];
+                            const S = pig.s[c];
+
+                            // Simplified K-M: use exponential absorption model for cleaner colors
+                            const absorption = Math.exp(-K * thickness);
+                            const scatter = S * thickness * 0.5;
+
+                            // Blend: more thickness = more absorption, less reflectance
+                            reflectance[c] *= absorption;
+                            reflectance[c] = reflectance[c] * (1 - scatter) + scatter * 0.1;
+                        }
+                    });
+
+                    // Apply paper texture for subtle grain (if enabled)
+                    const tex = this.showTexture ? (0.92 + this.paperH[i] * 0.08) : 1.0;
+
+                    imageData.data[idx] = Math.max(0, Math.min(255, reflectance[0] * 255 * tex));
+                    imageData.data[idx + 1] = Math.max(0, Math.min(255, reflectance[1] * 255 * tex));
+                    imageData.data[idx + 2] = Math.max(0, Math.min(255, reflectance[2] * 255 * tex));
+                    imageData.data[idx + 3] = 255;
+
+                }
+
+                return imageData;
+            }
+        }
+    </script>
+
+    <script>
+        // --- 1. 유틸리티 함수 ---
+        function simplifyPoints(points, tolerance) {
+            if (points.length <= 2) return points;
+            const sqTolerance = tolerance * tolerance;
+            return simplifyDPStep(points, 0, points.length - 1, sqTolerance);
+        }
+        function simplifyDPStep(points, first, last, sqTolerance) {
+            let maxSqDist = sqTolerance;
+            let index = 0;
+            for (let i = first + 1; i < last; i++) {
+                const sqDist = getSqSegDist(points[i], points[first], points[last]);
+                if (sqDist > maxSqDist) { index = i; maxSqDist = sqDist; }
+            }
+            if (maxSqDist > sqTolerance) {
+                const left = simplifyDPStep(points, first, index, sqTolerance);
+                const right = simplifyDPStep(points, index, last, sqTolerance);
+                return left.slice(0, left.length - 1).concat(right);
+            } else { return [points[first], points[last]]; }
+        }
+        function getSqSegDist(p, p1, p2) {
+            let x = p1.x, y = p1.y, dx = p2.x - x, dy = p2.y - y;
+            if (dx !== 0 || dy !== 0) {
+                const t = ((p.x - x) * dx + (p.y - y) * dy) / (dx * dx + dy * dy);
+                if (t > 1) { x = p2.x; y = p2.y; }
+                else if (t > 0) { x += dx * t; y += dy * t; }
+            }
+            dx = p.x - x; dy = p.y - y;
+            return dx * dx + dy * dy;
+        }
+        function getCatmullRomPoints(points, segments = 5) {
+            if (points.length < 2) return points;
+            let result = [];
+            const extendedPoints = [points[0], ...points, points[points.length - 1]];
+            for (let i = 0; i < extendedPoints.length - 3; i++) {
+                const p0 = extendedPoints[i], p1 = extendedPoints[i + 1], p2 = extendedPoints[i + 2], p3 = extendedPoints[i + 3];
+                const limit = (i === extendedPoints.length - 4) ? segments : segments - 1;
+                for (let j = 0; j <= limit; j++) {
+                    const t = j / segments, tt = t * t, ttt = tt * t;
+                    const x = 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * tt + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * ttt);
+                    const y = 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * tt + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * ttt);
+                    result.push({ x: x, y: y });
+                }
+            }
+            return result;
+        }
+        function getQuadraticBezierPoints(points, segmentsPerCurve = 10) {
+            if (points.length < 3) return points;
+            let newPoints = [];
+            let p0 = points[0];
+            newPoints.push(p0);
+            for (let i = 1; i < points.length - 2; i++) {
+                const pc = points[i];
+                const pNext = points[i + 1];
+                const pe = { x: (pc.x + pNext.x) / 2, y: (pc.y + pNext.y) / 2 };
+                for (let j = 1; j <= segmentsPerCurve; j++) {
+                    const t = j / segmentsPerCurve;
+                    const invT = 1 - t;
+                    const x = (invT * invT * p0.x) + (2 * invT * t * pc.x) + (t * t * pe.x);
+                    const y = (invT * invT * p0.y) + (2 * invT * t * pc.y) + (t * t * pe.y);
+                    newPoints.push({ x, y });
+                }
+                p0 = pe;
+            }
+            const pLastControl = points[points.length - 2];
+            const pLastEnd = points[points.length - 1];
+            for (let j = 1; j <= segmentsPerCurve; j++) {
+                const t = j / segmentsPerCurve;
+                const invT = 1 - t;
+                const x = (invT * invT * p0.x) + (2 * invT * t * pLastControl.x) + (t * t * pLastEnd.x);
+                const y = (invT * invT * p0.y) + (2 * invT * t * pLastControl.y) + (t * t * pLastEnd.y);
+                newPoints.push({ x, y });
+            }
+            return newPoints;
+        }
+
+        // --- 2. DOM 요소 선택 ---
+        const mediaInput = document.getElementById('mediaInput');
+        const mainCanvas = document.getElementById('mainCanvas');
+        const overlayCanvas = document.getElementById('overlayCanvas'); // NEW
+        const hiddenCanvas = document.getElementById('hiddenCanvas');
+        const paletteCanvas = document.getElementById('paletteCanvas');
+        const canvasContainer = document.getElementById('canvasContainer');
+        const ctx = mainCanvas.getContext('2d');
+        const overlayCtx = overlayCanvas.getContext('2d'); // NEW
+        const hiddenCtx = hiddenCanvas.getContext('2d', { willReadFrequently: true });
+        const paletteCtx = paletteCanvas.getContext('2d', { willReadFrequently: true });
+        const sourceVideo = document.getElementById('sourceVideo');
+
+        // 컨트롤
+        const detailSlider = document.getElementById('detailSlider');
+        const smoothSlider = document.getElementById('smoothSlider');
+        const ghostSlider = document.getElementById('ghostSlider');
+        const splitSlider = document.getElementById('splitSlider');
+        const speedSlider = document.getElementById('speedSlider');
+        const instantCheck = document.getElementById('instantCheck');
+        const speedControlArea = document.getElementById('speedControlArea');
+        const algoSelect = document.getElementById('algoSelect');
+        const colorModeSelect = document.getElementById('colorModeSelect');
+
+        // Focus 컨트롤 (New)
+        const toggleFocusBtn = document.getElementById('toggleFocusBtn');
+        const clearZonesBtn = document.getElementById('clearZonesBtn');
+        const showGuidesCheck = document.getElementById('showGuidesCheck');
+
+        // 텍스트/표시
+        const fileNameEl = document.getElementById('fileName');
+        const detailVal = document.getElementById('detailVal');
+        const smoothVal = document.getElementById('smoothVal');
+        const ghostVal = document.getElementById('ghostVal');
+        const splitVal = document.getElementById('splitVal');
+        const speedVal = document.getElementById('speedVal');
+        const smoothLabel = document.getElementById('smoothLabel');
+        const smoothDesc = document.getElementById('smoothDesc');
+        const loadingText = document.getElementById('loadingText');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const statsEl = document.getElementById('stats');
+
+        // 비디오 컨트롤
+        const playbackSpeedControl = document.getElementById('playbackSpeedControl');
+        const playbackRateSlider = document.getElementById('playbackRateSlider');
+        const playbackRateVal = document.getElementById('playbackRateVal');
+        const togglePlayBtn = document.getElementById('togglePlayBtn');
+
+        // 색상 관련 요소
+        const bgColorInput = document.getElementById('bgColorInput');
+        const bgColorHex = document.getElementById('bgColorHex');
+        const singleColorOptions = document.getElementById('singleColorOptions');
+        const tritoneOptions = document.getElementById('tritoneOptions');
+        const paletteOptions = document.getElementById('paletteOptions');
+        const triShadow = document.getElementById('triShadow');
+        const triMid = document.getElementById('triMid');
+        const triHigh = document.getElementById('triHigh');
+        const paletteImgInput = document.getElementById('paletteImgInput');
+        const paletteContainer = document.getElementById('paletteContainer');
+
+        // 버튼
+        const redrawBtn = document.getElementById('redrawBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        // 상태 변수
+        let originalImage = null;
+        let currentMediaType = 'none';
+        let audioBufferData = null;
+        let points = [];
+        let sortedPoints = [];
+        let smoothedPoints = [];
+        let animationId = null;
+        let videoLoopId = null;
+
+        // Focus Zones 상태 (New)
+        let focusZones = []; // {x, y, radius}
+        let isFocusEditMode = false;
+        let draggedZone = null;
+
+        // Watercolor Engine Instance (NEW)
+        // Watercolor Engine Instance (NEW)
+        const wcEngine = new WatercolorEngine(200, 3);
+        const drawStyleSelect = document.getElementById('drawStyleSelect');
+        const watercolorCanvas = document.createElement('canvas'); // For rendering buffer
+        watercolorCanvas.width = 200;
+        watercolorCanvas.height = 200;
+        const watercolorCtx = watercolorCanvas.getContext('2d');
+
+        let config = {
+            numPoints: 2500,
+            smoothness: 3,
+            mode: 'gaussian',
+            ghostOpacity: 0.1,
+            splitThreshold: 150,
+            speed: 5,
+            instant: false,
+
+            bgColor: '#ffffff',
+            colorMode: 'single',
+            triColors: ['#2d3748', '#4299e1', '#fbd38d'],
+            palette: [],
+            drawStyle: 'standard', // standard or watercolor
+            edgeMode: 'basic' // basic, sobel, sobel_fine
+        };
+
+        // Edge Mode Selector
+        const edgeModeSelect = document.getElementById('edgeModeSelect');
+        if (edgeModeSelect) {
+            edgeModeSelect.addEventListener('change', (e) => {
+                config.edgeMode = e.target.value;
+                if (currentMediaType !== 'video') restartProcess();
+            });
+        }
+
+        // --- 3. 이벤트 리스너 설정 ---
+
+        // Watercolor Options Panel
+        const watercolorOptions = document.getElementById('watercolorOptions');
+        const wcBrushSize = document.getElementById('wcBrushSize');
+        const wcWater = document.getElementById('wcWater');
+        const wcPigment = document.getElementById('wcPigment');
+        const wcEvap = document.getElementById('wcEvap');
+        const wcIter = document.getElementById('wcIter');
+
+        function updateWatercolorOptionsVisibility() {
+            if (config.drawStyle === 'watercolor' || config.drawStyle === 'realistic') {
+                watercolorOptions.classList.remove('hidden');
+            } else {
+                watercolorOptions.classList.add('hidden');
+            }
+        }
+
+        // Watercolor slider listeners
+        if (wcBrushSize) {
+            wcBrushSize.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value);
+                document.getElementById('wcBrushSizeVal').textContent = val;
+                wcEngine.brush.size = val;
+            });
+        }
+        if (wcWater) {
+            wcWater.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('wcWaterVal').textContent = val.toFixed(1);
+                wcEngine.brush.water = val;
+            });
+        }
+        if (wcPigment) {
+            wcPigment.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('wcPigmentVal').textContent = val.toFixed(2);
+                wcEngine.brush.pigment = val;
+            });
+        }
+        if (wcEvap) {
+            wcEvap.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('wcEvapVal').textContent = val.toFixed(4);
+                wcEngine.physics.evaporation = val;
+            });
+        }
+        if (wcIter) {
+            wcIter.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value);
+                document.getElementById('wcIterVal').textContent = val;
+                wcEngine.physics.iterations = val;
+            });
+        }
+
+        // New watercolor options from watercolor-sim
+        const wcViscosity = document.getElementById('wcViscosity');
+        const wcPressure = document.getElementById('wcPressure');
+        const wcAdhesion = document.getElementById('wcAdhesion');
+        const wcGranularity = document.getElementById('wcGranularity');
+        const wcShowTexture = document.getElementById('wcShowTexture');
+
+        if (wcViscosity) {
+            wcViscosity.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('wcViscosityVal').textContent = val.toFixed(2);
+                wcEngine.physics.viscosity = val;
+            });
+        }
+        if (wcPressure) {
+            wcPressure.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('wcPressureVal').textContent = val.toFixed(1);
+                wcEngine.physics.pressure = val;
+            });
+        }
+        if (wcAdhesion) {
+            wcAdhesion.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('wcAdhesionVal').textContent = val.toFixed(3);
+                wcEngine.pigmentProps.adhesion = val;
+            });
+        }
+        if (wcGranularity) {
+            wcGranularity.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('wcGranularityVal').textContent = val.toFixed(1);
+                wcEngine.pigmentProps.granularity = val;
+            });
+        }
+        if (wcShowTexture) {
+            wcShowTexture.addEventListener('change', (e) => {
+                wcEngine.showTexture = e.target.checked;
+            });
+        }
+
+        // Resolution slider
+        const wcResolution = document.getElementById('wcResolution');
+        config.wcResolution = 400; // Default resolution
+        if (wcResolution) {
+            wcResolution.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value);
+                document.getElementById('wcResolutionVal').textContent = val;
+                config.wcResolution = val;
+            });
+        }
+
+        // Draw Style change (NEW)
+        if (drawStyleSelect) {
+            drawStyleSelect.addEventListener('change', (e) => {
+                config.drawStyle = e.target.value;
+                updateWatercolorOptionsVisibility();
+                if (currentMediaType !== 'video') restartProcess();
+            });
+        }
+
+        // Focus 관련 리스너 (New)
+        toggleFocusBtn.addEventListener('click', () => {
+            isFocusEditMode = !isFocusEditMode;
+            if (isFocusEditMode) {
+                toggleFocusBtn.textContent = "편집 끄기";
+                toggleFocusBtn.classList.replace('bg-gray-200', 'bg-indigo-600');
+                toggleFocusBtn.classList.replace('text-gray-800', 'text-white');
+                canvasContainer.classList.add('edit-mode');
+            } else {
+                toggleFocusBtn.textContent = "편집 켜기";
+                toggleFocusBtn.classList.replace('bg-indigo-600', 'bg-gray-200');
+                toggleFocusBtn.classList.replace('text-white', 'text-gray-800');
+                canvasContainer.classList.remove('edit-mode');
+            }
+        });
+
+        showGuidesCheck.addEventListener('change', drawOverlay);
+
+        clearZonesBtn.addEventListener('click', () => {
+            if (confirm("모든 강조 영역을 삭제하시겠습니까?")) {
+                focusZones = [];
+                drawOverlay();
+                if (currentMediaType !== 'video') restartProcess();
+            }
+        });
+
+        // Overlay Canvas Interaction
+        overlayCanvas.addEventListener('mousedown', (e) => {
+            if (!isFocusEditMode) return;
+            const rect = overlayCanvas.getBoundingClientRect();
+            const scaleX = overlayCanvas.width / rect.width;
+            const scaleY = overlayCanvas.height / rect.height;
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+
+            // Check if clicking existing zone
+            for (let i = focusZones.length - 1; i >= 0; i--) {
+                const z = focusZones[i];
+                const dist = Math.sqrt((x - z.x) ** 2 + (y - z.y) ** 2);
+                if (dist < z.radius) {
+                    draggedZone = z;
+                    return;
+                }
+            }
+
+            // Add new zone if not clicking existing (max 10)
+            if (focusZones.length < 10) {
+                focusZones.push({ x: x, y: y, radius: 50 }); // Default radius
+                drawOverlay();
+                if (currentMediaType !== 'video') restartProcess(); // Auto update
+            } else {
+                alert("최대 10개까지만 추가할 수 있습니다.");
+            }
+        });
+
+        overlayCanvas.addEventListener('mousemove', (e) => {
+            if (!isFocusEditMode || !draggedZone) return;
+            const rect = overlayCanvas.getBoundingClientRect();
+            const scaleX = overlayCanvas.width / rect.width;
+            const scaleY = overlayCanvas.height / rect.height;
+            draggedZone.x = (e.clientX - rect.left) * scaleX;
+            draggedZone.y = (e.clientY - rect.top) * scaleY;
+            drawOverlay();
+        });
+
+        overlayCanvas.addEventListener('mouseup', () => {
+            if (draggedZone) {
+                draggedZone = null;
+                if (currentMediaType !== 'video') restartProcess();
+            }
+        });
+
+        overlayCanvas.addEventListener('wheel', (e) => {
+            if (!isFocusEditMode) return;
+            e.preventDefault();
+            const rect = overlayCanvas.getBoundingClientRect();
+            const scaleX = overlayCanvas.width / rect.width;
+            const scaleY = overlayCanvas.height / rect.height;
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+
+            for (let z of focusZones) {
+                const dist = Math.sqrt((x - z.x) ** 2 + (y - z.y) ** 2);
+                if (dist < z.radius) {
+                    z.radius += e.deltaY * -0.1;
+                    if (z.radius < 10) z.radius = 10;
+                    if (z.radius > 300) z.radius = 300;
+                    drawOverlay();
+                    if (currentMediaType !== 'video') restartProcess(); // Optional: might be too heavy
+                    return;
+                }
+            }
+        });
+
+        overlayCanvas.addEventListener('contextmenu', (e) => {
+            if (!isFocusEditMode) return;
+            e.preventDefault();
+            const rect = overlayCanvas.getBoundingClientRect();
+            const scaleX = overlayCanvas.width / rect.width;
+            const scaleY = overlayCanvas.height / rect.height;
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+
+            for (let i = focusZones.length - 1; i >= 0; i--) {
+                const z = focusZones[i];
+                const dist = Math.sqrt((x - z.x) ** 2 + (y - z.y) ** 2);
+                if (dist < z.radius) {
+                    focusZones.splice(i, 1);
+                    drawOverlay();
+                    if (currentMediaType !== 'video') restartProcess();
+                    return;
+                }
+            }
+        });
+
+
+        // Existing Listeners
+        detailSlider.addEventListener('input', (e) => {
+            config.numPoints = parseInt(e.target.value);
+            detailVal.textContent = config.numPoints;
+        });
+        detailSlider.addEventListener('change', () => {
+            if (currentMediaType !== 'video') restartProcess();
+            else restartVideoProcess();
+        });
+
+        smoothSlider.addEventListener('input', (e) => {
+            config.smoothness = parseInt(e.target.value);
+            updateSmoothValText();
+        });
+        smoothSlider.addEventListener('change', () => {
+            if (currentMediaType !== 'video') { applySmoothing(); animatePath(); }
+        });
+
+        algoSelect.addEventListener('change', (e) => {
+            config.mode = e.target.value;
+            updateUIForMode();
+            if (currentMediaType !== 'video') { applySmoothing(); animatePath(); }
+        });
+
+        speedSlider.addEventListener('input', (e) => {
+            config.speed = parseInt(e.target.value);
+            if (speedVal) {
+                if (config.speed <= 3) speedVal.textContent = "느림";
+                else if (config.speed <= 15) speedVal.textContent = "보통";
+                else if (config.speed <= 30) speedVal.textContent = "빠름";
+                else speedVal.textContent = "매우 빠름";
+            }
+        });
+
+        instantCheck.addEventListener('change', (e) => {
+            config.instant = e.target.checked;
+            if (config.instant) speedControlArea.classList.add('disabled-slider');
+            else speedControlArea.classList.remove('disabled-slider');
+            if (currentMediaType !== 'video') animatePath();
+        });
+
+        playbackRateSlider.addEventListener('input', (e) => {
+            const rate = parseFloat(e.target.value);
+            sourceVideo.playbackRate = rate;
+            playbackRateVal.textContent = rate.toFixed(1) + 'x';
+        });
+
+        ghostSlider.addEventListener('input', (e) => {
+            config.ghostOpacity = parseInt(e.target.value) / 100;
+            ghostVal.textContent = e.target.value + '%';
+        });
+        ghostSlider.addEventListener('change', () => { if (currentMediaType !== 'video') animatePath(); });
+
+        splitSlider.addEventListener('input', (e) => {
+            config.splitThreshold = parseInt(e.target.value);
+            splitVal.textContent = config.splitThreshold + 'px';
+        });
+        splitSlider.addEventListener('change', () => { if (currentMediaType !== 'video') { applySmoothing(); animatePath(); } });
+
+        bgColorInput.addEventListener('input', (e) => {
+            config.bgColor = e.target.value;
+            bgColorHex.textContent = config.bgColor;
+            if (currentMediaType !== 'video') animatePath();
+        });
+
+        colorModeSelect.addEventListener('change', (e) => {
+            config.colorMode = e.target.value;
+            updateColorUI();
+            if (currentMediaType !== 'video') animatePath();
+        });
+
+        [triShadow, triMid, triHigh].forEach((input, idx) => {
+            input.addEventListener('input', (e) => {
+                config.triColors[idx] = e.target.value;
+                if (currentMediaType !== 'video') animatePath();
+            });
+        });
+
+        paletteImgInput.addEventListener('change', handlePaletteImageUpload);
+
+        mediaInput.addEventListener('change', handleMediaUpload);
+        redrawBtn.addEventListener('click', () => {
+            if (currentMediaType === 'video') restartVideoProcess();
+            else restartProcess(); // Re-detect to apply focus changes
+        });
+
+        togglePlayBtn.addEventListener('click', () => {
+            if (sourceVideo.paused) sourceVideo.play();
+            else sourceVideo.pause();
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = mainCanvas.width;
+            tempCanvas.height = mainCanvas.height;
+            const tCtx = tempCanvas.getContext('2d');
+            tCtx.fillStyle = config.bgColor;
+            tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tCtx.drawImage(mainCanvas, 0, 0);
+            const link = document.createElement('a');
+            link.download = 'oneline-croquis-focus.png';
+            link.href = tempCanvas.toDataURL();
+            link.click();
+        });
+
+        // --- 4. UI 업데이트 로직 ---
+        function updateSmoothValText() {
+            if (config.mode === 'gaussian') smoothVal.textContent = config.smoothness + "단계";
+            else smoothVal.textContent = config.smoothness;
+        }
+
+        function updateUIForMode() {
+            if (config.mode === 'gaussian') {
+                smoothLabel.textContent = "가우시안 강도";
+                smoothDesc.textContent = "* 반복할수록 선이 뭉개지며 부드러워집니다.";
+                smoothSlider.max = 10;
+            } else if (config.mode === 'spline') {
+                smoothLabel.textContent = "단순화 (RDP)";
+                smoothDesc.textContent = "* RDP 오차 허용치 (벡터화 강도)";
+                smoothSlider.max = 20;
+            } else if (config.mode === 'quadratic') {
+                smoothLabel.textContent = "단순화 (RDP)";
+                smoothDesc.textContent = "* 곡선 적용 전 단순화 강도";
+                smoothSlider.max = 20;
+            } else if (config.mode === 'rectilinear') {
+                smoothLabel.textContent = "직각 단순화";
+                smoothDesc.textContent = "* 높을수록 직각 구간이 커집니다 (단순화)";
+                smoothSlider.max = 20;
+            }
+            updateSmoothValText();
+        }
+
+        function updateColorUI() {
+            singleColorOptions.classList.add('hidden');
+            tritoneOptions.classList.add('hidden');
+            paletteOptions.classList.add('hidden');
+
+            if (config.colorMode === 'single') singleColorOptions.classList.remove('hidden');
+            else if (config.colorMode === 'tritone') tritoneOptions.classList.remove('hidden');
+            else if (config.colorMode === 'palette') paletteOptions.classList.remove('hidden');
+        }
+
+        function drawOverlay() {
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            if (!showGuidesCheck.checked) return;
+
+            focusZones.forEach((z, idx) => {
+                overlayCtx.beginPath();
+                overlayCtx.arc(z.x, z.y, z.radius, 0, Math.PI * 2);
+                overlayCtx.strokeStyle = 'rgba(255, 50, 50, 0.8)';
+                overlayCtx.lineWidth = 2;
+                overlayCtx.setLineDash([5, 5]);
+                overlayCtx.stroke();
+                overlayCtx.setLineDash([]);
+
+                overlayCtx.fillStyle = 'rgba(255, 50, 50, 0.1)';
+                overlayCtx.fill();
+
+                // Number
+                overlayCtx.fillStyle = 'white';
+                overlayCtx.font = '12px Arial';
+                overlayCtx.fillText(idx + 1, z.x - 4, z.y + 4);
+            });
+        }
+
+        // --- 5. 파레트 추출 로직 ---
+        function handlePaletteImageUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    extractPaletteFromImage(img);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function extractPaletteFromImage(img) {
+            paletteCanvas.width = 100;
+            paletteCanvas.height = 100;
+            paletteCtx.drawImage(img, 0, 0, 100, 100);
+
+            const data = paletteCtx.getImageData(0, 0, 100, 100).data;
+            const colors = [];
+            const threshold = 40;
+
+            for (let i = 0; i < data.length; i += 4 * 10) {
+                if (colors.length >= 10) break;
+
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+
+                let isDistinct = true;
+                for (const c of colors) {
+                    const dr = c.r - r;
+                    const dg = c.g - g;
+                    const db = c.b - b;
+                    const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+                    if (dist < threshold) {
+                        isDistinct = false;
+                        break;
+                    }
+                }
+
+                if (isDistinct) {
+                    colors.push({ r, g, b });
+                }
+            }
+
+            config.palette = colors.map(c => rgbToHex(c.r, c.g, c.b));
+            renderPaletteUI();
+
+            if (config.colorMode === 'palette' && currentMediaType !== 'video') animatePath();
+        }
+
+        function rgbToHex(r, g, b) {
+            return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+        }
+
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : { r: 0, g: 0, b: 0 };
+        }
+
+        function renderPaletteUI() {
+            paletteContainer.innerHTML = '';
+            if (config.palette.length === 0) {
+                paletteContainer.innerHTML = '<span class="text-[10px] text-gray-400 w-full text-center">이미지를 올리면 색상이 추출됩니다.</span>';
+                return;
+            }
+
+            config.palette.forEach((color, index) => {
+                const chip = document.createElement('div');
+                chip.className = 'color-chip';
+                chip.style.backgroundColor = color;
+                chip.title = '클릭하여 삭제';
+                chip.addEventListener('click', () => {
+                    config.palette.splice(index, 1);
+                    renderPaletteUI();
+                    if (config.colorMode === 'palette' && currentMediaType !== 'video') animatePath();
+                });
+                paletteContainer.appendChild(chip);
+            });
+        }
+
+        // --- 6. 렌더링 헬퍼 ---
+        function getStrokeColor(p, pixelData, w) {
+            let r = 34, g = 34, b = 34;
+
+            if (config.colorMode === 'single') {
+                return '#222222';
+            }
+
+            if (pixelData) {
+                const ix = Math.min(w - 1, Math.max(0, Math.floor(p.x)));
+                const iy = Math.min(mainCanvas.height - 1, Math.max(0, Math.floor(p.y)));
+                const idx = (iy * w + ix) * 4;
+                r = pixelData[idx];
+                g = pixelData[idx + 1];
+                b = pixelData[idx + 2];
+            }
+
+            if (config.colorMode === 'original') {
+                return `rgb(${r},${g},${b})`;
+            }
+
+            if (config.colorMode === 'tritone') {
+                const brightness = (r + g + b) / 3;
+                if (brightness < 85) return config.triColors[0];
+                if (brightness < 170) return config.triColors[1];
+                return config.triColors[2];
+            }
+
+            if (config.colorMode === 'palette') {
+                if (config.palette.length === 0) return '#222222';
+                let minD = Infinity;
+                let bestColor = config.palette[0];
+
+                for (const hex of config.palette) {
+                    const c = hexToRgb(hex);
+                    const dr = c.r - r;
+                    const dg = c.g - g;
+                    const db = c.b - b;
+                    const dist = dr * dr + dg * dg + db * db;
+                    if (dist < minD) {
+                        minD = dist;
+                        bestColor = hex;
+                    }
+                }
+                return bestColor;
+            }
+
+            return '#222222';
+        }
+
+
+        // --- 7. 메인 처리 로직 ---
+        async function handleMediaUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            fileNameEl.textContent = file.name;
+            const fileType = file.type;
+            stopAllLoops();
+            togglePlayBtn.classList.add('hidden');
+            playbackSpeedControl.classList.add('hidden');
+            showLoading(true, "파일 분석 중...");
+
+            if (fileType.startsWith('image/')) {
+                currentMediaType = 'image';
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    originalImage = new Image();
+                    originalImage.onload = () => restartProcess();
+                    originalImage.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            } else if (fileType.startsWith('audio/')) {
+                currentMediaType = 'audio';
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    audioBufferData = await audioCtx.decodeAudioData(arrayBuffer);
+                    restartProcess();
+                } catch (err) { alert("오디오 분석 실패"); showLoading(false); }
+            } else if (fileType.startsWith('video/')) {
+                currentMediaType = 'video';
+                playbackSpeedControl.classList.remove('hidden');
+                const url = URL.createObjectURL(file);
+                sourceVideo.src = url;
+                sourceVideo.playbackRate = parseFloat(playbackRateSlider.value);
+                sourceVideo.onloadedmetadata = () => {
+                    togglePlayBtn.classList.remove('hidden');
+                    sourceVideo.play();
+                    restartVideoProcess();
+                };
+                sourceVideo.onerror = () => { alert("비디오 로드 실패"); showLoading(false); };
+            } else { alert("지원하지 않는 형식"); showLoading(false); }
+        }
+
+        function stopAllLoops() {
+            if (animationId) cancelAnimationFrame(animationId);
+            if (videoLoopId) cancelAnimationFrame(videoLoopId);
+            sourceVideo.pause();
+        }
+        function showLoading(show, text) {
+            if (text) loadingText.textContent = text;
+            if (show) loadingOverlay.classList.remove('hidden');
+            else loadingOverlay.classList.add('hidden');
+        }
+        function restartProcess() {
+            stopAllLoops();
+            showLoading(true, "엣지 검출 및 최적화 중...");
+            setTimeout(() => {
+                prepareHiddenCanvas(); detectEdges(); optimizePath(); applySmoothing(); animatePath(); showLoading(false);
+            }, 50);
+        }
+        function restartVideoProcess() {
+            stopAllLoops();
+            showLoading(true, "비디오 엔진 가동...");
+            const container = document.getElementById('canvasContainer');
+            const maxWidth = container.clientWidth - 40;
+            const maxHeight = container.clientHeight - 40;
+            let w = sourceVideo.videoWidth;
+            let h = sourceVideo.videoHeight;
+            const scale = Math.min(maxWidth / w, maxHeight / h);
+            w = Math.floor(w * scale); h = Math.floor(h * scale);
+            mainCanvas.width = w; mainCanvas.height = h;
+            hiddenCanvas.width = w; hiddenCanvas.height = h;
+            overlayCanvas.width = w; overlayCanvas.height = h; // Resizing overlay
+            showLoading(false);
+            videoLoop();
+        }
+        function videoLoop() {
+            if (sourceVideo.paused || sourceVideo.ended) {
+                videoLoopId = requestAnimationFrame(videoLoop);
+                return;
+            }
+            hiddenCtx.drawImage(sourceVideo, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+            detectEdges(); optimizePath(); applySmoothing(); drawInstantFrame(); drawOverlay(); // Draw overlay on loop
+            videoLoopId = requestAnimationFrame(videoLoop);
+        }
+        function prepareHiddenCanvas() {
+            const container = document.getElementById('canvasContainer');
+            const maxWidth = container.clientWidth - 40;
+            const maxHeight = container.clientHeight - 40;
+            let w, h;
+            if (currentMediaType === 'image' && originalImage) {
+                w = originalImage.width; h = originalImage.height;
+                const scale = Math.min(maxWidth / w, maxHeight / h);
+                w = Math.floor(w * scale); h = Math.floor(h * scale);
+                mainCanvas.width = w; mainCanvas.height = h;
+                hiddenCanvas.width = w; hiddenCanvas.height = h;
+                overlayCanvas.width = w; overlayCanvas.height = h; // Resize overlay
+                hiddenCtx.drawImage(originalImage, 0, 0, w, h);
+            } else if (currentMediaType === 'audio' && audioBufferData) {
+                w = 800; h = 600;
+                const scale = Math.min(maxWidth / w, maxHeight / h);
+                w = Math.floor(w * scale); h = Math.floor(h * scale);
+                mainCanvas.width = w; mainCanvas.height = h;
+                hiddenCanvas.width = w; hiddenCanvas.height = h;
+                overlayCanvas.width = w; overlayCanvas.height = h; // Resize overlay
+                drawWaveformToHiddenCanvas(w, h);
+            }
+            drawOverlay(); // Keep guides visible
+        }
+        function drawWaveformToHiddenCanvas(w, h) {
+            hiddenCtx.fillStyle = '#ffffff';
+            hiddenCtx.fillRect(0, 0, w, h);
+            const rawData = audioBufferData.getChannelData(0);
+            const step = Math.ceil(rawData.length / w);
+            const amp = h / 2;
+            hiddenCtx.fillStyle = '#000000';
+            hiddenCtx.beginPath();
+            for (let i = 0; i < w; i++) {
+                let min = 1.0; max = -1.0;
+                for (let j = 0; j < step; j++) {
+                    const datum = rawData[(i * step) + j];
+                    if (datum < min) min = datum;
+                    if (datum > max) max = datum;
+                }
+                const yLow = (1 + min) * amp;
+                const yHigh = (1 + max) * amp;
+                hiddenCtx.fillRect(i, yLow, 1, Math.max(1, yHigh - yLow));
+            }
+        }
+
+        // --- SOBEL EDGE DETECTION ---
+        function applySobelFilter(data, w, h) {
+            // Returns array of edge magnitudes for each pixel
+            const gray = new Float32Array(w * h);
+            const edges = new Float32Array(w * h);
+
+            // Convert to grayscale
+            for (let i = 0; i < w * h; i++) {
+                const idx = i * 4;
+                gray[i] = (data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114);
+            }
+
+            // Sobel kernels
+            const sobelX = [-1, 0, 1, -2, 0, 2, -1, 0, 1];
+            const sobelY = [-1, -2, -1, 0, 0, 0, 1, 2, 1];
+
+            for (let y = 1; y < h - 1; y++) {
+                for (let x = 1; x < w - 1; x++) {
+                    let gx = 0, gy = 0;
+                    let ki = 0;
+                    for (let ky = -1; ky <= 1; ky++) {
+                        for (let kx = -1; kx <= 1; kx++) {
+                            const pixel = gray[(y + ky) * w + (x + kx)];
+                            gx += pixel * sobelX[ki];
+                            gy += pixel * sobelY[ki];
+                            ki++;
+                        }
+                    }
+                    edges[y * w + x] = Math.sqrt(gx * gx + gy * gy);
+                }
+            }
+            return edges;
+        }
+
+        // --- EDGE DETECTION MODIFIED FOR FOCUS ZONES + SOBEL ---
+        function detectEdges() {
+            const w = hiddenCanvas.width;
+            const h = hiddenCanvas.height;
+            const imgData = hiddenCtx.getImageData(0, 0, w, h);
+            const data = imgData.data;
+            let edgeCandidates = [];
+            const isHighDetail = config.numPoints > 4000;
+            const baseStep = isHighDetail ? 1 : 2;
+
+            // Compute Sobel edges if needed
+            let sobelEdges = null;
+            if (config.edgeMode === 'sobel' || config.edgeMode === 'sobel_fine') {
+                sobelEdges = applySobelFilter(data, w, h);
+            }
+
+            // Threshold settings based on mode
+            let baseThreshold = 20;
+            let focusThreshold = 10;
+            if (config.edgeMode === 'sobel') {
+                baseThreshold = 30;  // Sobel values are larger
+                focusThreshold = 15;
+            } else if (config.edgeMode === 'sobel_fine') {
+                baseThreshold = 15;  // Lower = more detail
+                focusThreshold = 8;
+            }
+
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+
+                    // 1. Focus Zone Check
+                    let inFocus = false;
+                    for (const zone of focusZones) {
+                        const dx = x - zone.x;
+                        const dy = y - zone.y;
+                        if (dx * dx + dy * dy < zone.radius * zone.radius) {
+                            inFocus = true;
+                            break;
+                        }
+                    }
+
+                    // 2. Step Logic
+                    // For sobel_fine, always check every pixel
+                    if (config.edgeMode !== 'sobel_fine') {
+                        if (!inFocus && (x % baseStep !== 0 || y % baseStep !== 0)) continue;
+                    }
+
+                    // 3. Edge Detection
+                    let edgeStrength = 0;
+                    const threshold = inFocus ? focusThreshold : baseThreshold;
+
+                    if (sobelEdges) {
+                        // Sobel mode
+                        edgeStrength = sobelEdges[y * w + x];
+                    } else {
+                        // Basic mode - brightness difference
+                        const i = (y * w + x) * 4;
+                        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                        if (x < w - 1) {
+                            const rightI = (y * w + (x + 1)) * 4;
+                            const rightBrightness = (data[rightI] + data[rightI + 1] + data[rightI + 2]) / 3;
+                            edgeStrength = Math.abs(brightness - rightBrightness);
+                        }
+                        // Also check vertical for more complete edges
+                        if (y < h - 1) {
+                            const bottomI = ((y + 1) * w + x) * 4;
+                            const bottomBrightness = (data[bottomI] + data[bottomI + 1] + data[bottomI + 2]) / 3;
+                            const i = (y * w + x) * 4;
+                            const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                            edgeStrength = Math.max(edgeStrength, Math.abs(brightness - bottomBrightness));
+                        }
+                    }
+
+                    if (edgeStrength > threshold) {
+                        let probability = currentMediaType === 'video' ? (edgeStrength / 255) * 3 : (edgeStrength / 255) * 5;
+
+                        // Sobel produces higher values, normalize
+                        if (sobelEdges) {
+                            probability = (edgeStrength / 400) * 5; // Sobel max ~1020, normalize
+                        }
+
+                        if (inFocus) probability *= 3.0;
+
+                        if (Math.random() < probability) {
+                            edgeCandidates.push({ x, y });
+                        }
+                    }
+                }
+            }
+            shuffleArray(edgeCandidates);
+            points = edgeCandidates.slice(0, config.numPoints);
+        }
+
+        function optimizePath() {
+            if (points.length === 0) return;
+            const numP = points.length;
+            if (numP < 3000 || currentMediaType === 'video') { optimizePathSimple(); return; }
+            const cellSize = 30; const grid = {};
+            for (let i = 0; i < numP; i++) {
+                const p = points[i];
+                const cx = Math.floor(p.x / cellSize); const cy = Math.floor(p.y / cellSize);
+                const key = `${cx},${cy}`;
+                if (!grid[key]) grid[key] = []; grid[key].push(p);
+            }
+            let path = [];
+            const keys = Object.keys(grid); if (keys.length === 0) return;
+            let currentKey = keys[0]; let currentBucket = grid[currentKey];
+            let current = currentBucket.pop(); if (currentBucket.length === 0) delete grid[currentKey];
+            path.push(current);
+            let totalPoints = numP - 1;
+            while (totalPoints > 0) {
+                let bestP = null; let minDistSq = Infinity;
+                let bestBucketKey = null; let bestIndex = -1;
+                const cx = Math.floor(current.x / cellSize); const cy = Math.floor(current.y / cellSize);
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const key = `${cx + dx},${cy + dy}`; const bucket = grid[key];
+                        if (bucket) {
+                            for (let i = 0; i < bucket.length; i++) {
+                                const p = bucket[i]; const distSq = (current.x - p.x) ** 2 + (current.y - p.y) ** 2;
+                                if (distSq < minDistSq) { minDistSq = distSq; bestP = p; bestBucketKey = key; bestIndex = i; if (distSq < 4) break; }
+                            }
+                        }
+                    }
+                    if (minDistSq < 4) break;
+                }
+                if (bestP) {
+                    current = bestP;
+                    const bucket = grid[bestBucketKey]; const last = bucket.length - 1;
+                    if (bestIndex < last) { bucket[bestIndex] = bucket[last]; }
+                    bucket.pop(); if (bucket.length === 0) delete grid[bestBucketKey];
+                    path.push(current); totalPoints--;
+                } else {
+                    const remainingKeys = Object.keys(grid); if (remainingKeys.length === 0) break;
+                    currentKey = remainingKeys[0]; currentBucket = grid[currentKey];
+                    current = currentBucket.pop(); if (currentBucket.length === 0) delete grid[currentKey];
+                    path.push(current); totalPoints--;
+                }
+            }
+            sortedPoints = path;
+        }
+        function optimizePathSimple() {
+            let unvisited = [...points]; let path = [];
+            let current = unvisited.pop(); path.push(current);
+            const limitCheck = currentMediaType === 'video' ? 200 : unvisited.length;
+            while (unvisited.length > 0) {
+                let nearestIdx = -1; let minDistSq = Infinity;
+                const loopLimit = currentMediaType === 'video' ? Math.min(unvisited.length, limitCheck) : unvisited.length;
+                for (let i = 0; i < loopLimit; i++) {
+                    const p = unvisited[i]; const dx = current.x - p.x; const dy = current.y - p.y; const distSq = dx * dx + dy * dy;
+                    if (distSq < minDistSq) { minDistSq = distSq; nearestIdx = i; if (distSq < 4) break; }
+                }
+                if (nearestIdx !== -1) {
+                    current = unvisited[nearestIdx]; const lastIdx = unvisited.length - 1;
+                    if (nearestIdx < lastIdx) { unvisited[nearestIdx] = unvisited[lastIdx]; }
+                    unvisited.pop(); path.push(current);
+                } else { current = unvisited.pop(); path.push(current); }
+            }
+            sortedPoints = path;
+        }
+        function applySmoothing() {
+            if (!sortedPoints || sortedPoints.length < 3) { smoothedPoints = sortedPoints; return; }
+            if (config.mode === 'gaussian') applyGaussianSmoothing();
+            else if (config.mode === 'spline') applySplineSmoothing();
+            else if (config.mode === 'quadratic') applyQuadraticSmoothing();
+            else if (config.mode === 'rectilinear') applyRectilinearSmoothing();
+        }
+        function applyGaussianSmoothing() {
+            let tempPoints = JSON.parse(JSON.stringify(sortedPoints));
+            const iterations = config.smoothness;
+            for (let iter = 0; iter < iterations; iter++) {
+                let nextPass = []; nextPass.push(tempPoints[0]);
+                for (let i = 1; i < tempPoints.length - 1; i++) {
+                    const prev = tempPoints[i - 1]; const curr = tempPoints[i]; const next = tempPoints[i + 1];
+                    const d1 = Math.hypot(curr.x - prev.x, curr.y - prev.y); const d2 = Math.hypot(next.x - curr.x, next.y - curr.y);
+                    if (d1 < config.splitThreshold && d2 < config.splitThreshold) {
+                        const newX = prev.x * 0.25 + curr.x * 0.5 + next.x * 0.25;
+                        const newY = prev.y * 0.25 + curr.y * 0.5 + next.y * 0.25;
+                        nextPass.push({ x: newX, y: newY });
+                    } else { nextPass.push(curr); }
+                }
+                nextPass.push(tempPoints[tempPoints.length - 1]); tempPoints = nextPass;
+            }
+            smoothedPoints = tempPoints;
+        }
+        function applySplineSmoothing() {
+            smoothedPoints = []; const strokes = getStrokes(sortedPoints);
+            const tolerance = Math.max(0.5, config.smoothness * 0.8);
+            strokes.forEach(stroke => {
+                if (stroke.length < 3) { smoothedPoints.push(...stroke); return; }
+                const simpleStroke = simplifyPoints(stroke, tolerance);
+                const splineStroke = getCatmullRomPoints(simpleStroke, 5);
+                smoothedPoints.push(...splineStroke);
+            });
+        }
+        function applyQuadraticSmoothing() {
+            smoothedPoints = []; const strokes = getStrokes(sortedPoints);
+            const tolerance = Math.max(0.5, config.smoothness * 0.8);
+            strokes.forEach(stroke => {
+                if (stroke.length < 3) { smoothedPoints.push(...stroke); return; }
+                const simpleStroke = simplifyPoints(stroke, tolerance);
+                const quadStroke = getQuadraticBezierPoints(simpleStroke, 10);
+                smoothedPoints.push(...quadStroke);
+            });
+        }
+        function applyRectilinearSmoothing() {
+            smoothedPoints = []; const tolerance = Math.max(0.5, config.smoothness * 1.5);
+            const simpleStroke = simplifyPoints(sortedPoints, tolerance);
+            smoothedPoints.push(simpleStroke[0]);
+            for (let i = 0; i < simpleStroke.length - 1; i++) {
+                const curr = simpleStroke[i]; const next = simpleStroke[i + 1];
+                const dist = Math.hypot(next.x - curr.x, next.y - curr.y);
+                if (dist > config.splitThreshold) { smoothedPoints.push(next); }
+                else {
+                    if (Math.random() > 0.5) { smoothedPoints.push({ x: next.x, y: curr.y }); }
+                    else { smoothedPoints.push({ x: curr.x, y: next.y }); }
+                    smoothedPoints.push(next);
+                }
+            }
+        }
+        function getStrokes(points) {
+            let strokes = []; let currentStroke = [points[0]];
+            for (let i = 1; i < points.length; i++) {
+                const prev = points[i - 1]; const curr = points[i];
+                const dist = Math.hypot(curr.x - prev.x, curr.y - prev.y);
+                if (dist > config.splitThreshold) { strokes.push(currentStroke); currentStroke = [curr]; }
+                else { currentStroke.push(curr); }
+            }
+            strokes.push(currentStroke); return strokes;
+        }
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        // --- 8. 그리기 함수 (업데이트) ---
+        function drawInstantFrame() {
+            const w = mainCanvas.width; const h = mainCanvas.height;
+            ctx.fillStyle = config.bgColor; // 배경색 적용
+            ctx.fillRect(0, 0, w, h);
+            if (!smoothedPoints || smoothedPoints.length < 2) return;
+
+            let pixelData = null;
+            if (config.colorMode === 'original' || config.colorMode === 'tritone' || config.colorMode === 'palette') {
+                pixelData = hiddenCtx.getImageData(0, 0, w, h).data;
+            }
+
+            let strokeCount = 1;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = config.mode === 'rectilinear' ? 'miter' : 'round';
+            ctx.beginPath();
+
+            for (let i = 0; i < smoothedPoints.length - 1; i++) {
+                const p1 = smoothedPoints[i]; const p2 = smoothedPoints[i + 1];
+                const dx = p1.x - p2.x; const dy = p1.y - p2.y; const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist > config.splitThreshold) { strokeCount++; }
+                else {
+                    ctx.beginPath(); ctx.moveTo(p1.x, p1.y);
+                    if (dist > 10) {
+                        ctx.lineTo(p2.x, p2.y);
+                        ctx.strokeStyle = `rgba(180, 180, 200, ${config.ghostOpacity})`;
+                        ctx.lineWidth = 0.5;
+                    } else {
+                        ctx.lineTo(p2.x, p2.y);
+                        ctx.strokeStyle = getStrokeColor(p1, pixelData, w); // 색상 결정 함수 사용
+                        let baseWidth = 1.5;
+                        if (config.mode === 'gaussian') baseWidth = 2.0;
+                        if (config.mode === 'quadratic') baseWidth = 1.8;
+                        ctx.lineWidth = Math.max(0.5, baseWidth - (dist / 10));
+                    }
+                    ctx.stroke();
+                }
+            }
+            updateStats(strokeCount);
+        }
+
+        function animatePath() {
+            if (animationId) cancelAnimationFrame(animationId);
+            if (config.instant) { drawInstantFrame(); return; }
+
+            const w = mainCanvas.width; const h = mainCanvas.height;
+            ctx.fillStyle = config.bgColor; // 배경색
+            ctx.fillRect(0, 0, w, h);
+
+            if (!smoothedPoints || smoothedPoints.length < 2) return;
+
+            // Watercolor Setup
+            if (config.drawStyle === 'watercolor') {
+                wcEngine.reset();
+            }
+
+            let pixelData = null;
+            if (config.colorMode === 'original' || config.colorMode === 'tritone' || config.colorMode === 'palette') {
+                pixelData = hiddenCtx.getImageData(0, 0, w, h).data;
+            }
+
+            let strokeCount = 1;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = config.mode === 'rectilinear' ? 'miter' : 'round';
+            let currentIndex = 0;
+            const totalPoints = smoothedPoints.length;
+
+            function drawFrame() {
+                if (currentIndex >= totalPoints - 1) { updateStats(strokeCount); return; }
+                const drawSpeed = config.speed;
+
+                if (config.drawStyle === 'watercolor' || config.drawStyle === 'realistic') {
+                    // Update engine settings based on mode
+                    const targetRes = config.drawStyle === 'realistic' ? 1000 : (config.wcResolution || 400);
+
+                    if (wcEngine.GRID_SIZE !== targetRes) {
+                        wcEngine.resize(targetRes);
+                        watercolorCanvas.width = targetRes;
+                        watercolorCanvas.height = targetRes;
+                        wcEngine.reset();
+                    }
+
+                    if (config.drawStyle === 'realistic') {
+                        wcEngine.physics.iterations = 24;
+                        wcEngine.physics.evaporation = 0.0003;
+                        wcEngine.brush.size = Math.max(8, targetRes / 100);
+                        wcEngine.brush.pigment = 0.06;
+                    } else {
+                        // Use slider values (already set via event listeners)
+                    }
+
+                    // Watercolor Mode - with interpolation for smooth strokes
+                    for (let k = 0; k < drawSpeed; k++) {
+                        if (currentIndex >= totalPoints - 1) break;
+                        const p1 = smoothedPoints[currentIndex];
+                        const p2 = smoothedPoints[currentIndex + 1];
+
+                        // Calculate distance and interpolation steps
+                        const dx = p2.x - p1.x;
+                        const dy = p2.y - p1.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+
+                        // Draw ghost line if points are too far apart (stroke break)
+                        if (dist > config.splitThreshold) {
+                            // Draw ghost line on main canvas (not watercolor)
+                            ctx.beginPath();
+                            ctx.moveTo(p1.x, p1.y);
+                            ctx.lineTo(p2.x, p2.y);
+                            ctx.strokeStyle = `rgba(180, 180, 200, ${config.ghostOpacity})`;
+                            ctx.lineWidth = 0.5;
+                            ctx.stroke();
+                            currentIndex++;
+
+                            continue;
+                        }
+
+                        // Interpolate between p1 and p2 for continuous strokes
+                        const stepSize = Math.max(1, wcEngine.brush.size / 2); // Overlap brushes
+                        const steps = Math.max(1, Math.ceil(dist / stepSize));
+
+                        for (let s = 0; s <= steps; s++) {
+                            const t = s / steps;
+                            const ix = p1.x + dx * t;
+                            const iy = p1.y + dy * t;
+
+                            // Map to grid coord
+                            const gx = Math.floor((ix / w) * wcEngine.GRID_SIZE);
+                            const gy = Math.floor((iy / h) * wcEngine.GRID_SIZE);
+
+                            // Get Color at interpolated position
+                            const color = getStrokeColor({ x: ix, y: iy }, pixelData, w);
+
+                            // Apply brush with color
+                            wcEngine.applyBrush(gx, gy, color);
+                        }
+                        currentIndex++;
+
+                    }
+                    // Simulate & Render
+                    wcEngine.step();
+                    // Render to temp canvas
+                    const imgData = wcEngine.render(watercolorCtx, wcEngine.GRID_SIZE, wcEngine.GRID_SIZE);
+                    watercolorCtx.putImageData(imgData, 0, 0);
+
+                    // Draw temp canvas scaled up to main canvas
+                    // Use 'source-over' to continuously draw watercolor frame
+                    // But since we clear background every frame in main loop, we need to re-draw persistent?
+                    // No, animatePath clears frame once at start.
+                    // Wait, wcEngine maintains its own state in buffers.
+                    // So we just draw the whole wc canvas onto main canvas.
+                    ctx.drawImage(watercolorCanvas, 0, 0, w, h);
+
+                } else if (config.drawStyle === 'drawing') {
+                    // Drawing / Sketch Mode
+                    ctx.lineCap = 'butt'; // Sketchy feel
+                    ctx.lineJoin = 'miter';
+
+                    for (let k = 0; k < drawSpeed; k++) {
+                        if (currentIndex >= totalPoints - 1) break;
+                        const p1 = smoothedPoints[currentIndex];
+                        const p2 = smoothedPoints[currentIndex + 1];
+
+                        const color = getStrokeColor(p1, pixelData, w);
+
+                        // Random jitter for sketch effect
+                        const jitter = () => (Math.random() - 0.5) * 1.5;
+
+                        ctx.beginPath();
+                        ctx.moveTo(p1.x + jitter(), p1.y + jitter());
+                        ctx.lineTo(p2.x + jitter(), p2.y + jitter());
+
+                        // Sketch style styling
+                        ctx.strokeStyle = color;
+                        ctx.globalCompositeOperation = 'multiply'; // Layering
+                        ctx.globalAlpha = 0.7; // Transparency
+                        ctx.lineWidth = Math.random() * 1.0 + 0.5; // Variable width
+
+                        ctx.stroke();
+
+                        // Occasional double stroke
+                        if (Math.random() > 0.7) {
+                            ctx.beginPath();
+                            ctx.moveTo(p1.x + jitter() * 2, p1.y + jitter() * 2);
+                            ctx.lineTo(p2.x + jitter() * 2, p2.y + jitter() * 2);
+                            ctx.globalAlpha = 0.4;
+                            ctx.stroke();
+                        }
+
+                        ctx.globalCompositeOperation = 'source-over';
+                        ctx.globalAlpha = 1.0;
+                        currentIndex++;
+                    }
+
+                } else {
+                    // Standard Mode
+                    for (let k = 0; k < drawSpeed; k++) {
+                        if (currentIndex >= totalPoints - 1) break;
+                        const p1 = smoothedPoints[currentIndex]; const p2 = smoothedPoints[currentIndex + 1];
+                        const dx = p1.x - p2.x; const dy = p1.y - p2.y; const dist = Math.sqrt(dx * dx + dy * dy);
+
+                        ctx.beginPath(); ctx.moveTo(p1.x, p1.y);
+                        if (dist > config.splitThreshold) { strokeCount++; }
+                        else if (dist > 10) {
+                            ctx.lineTo(p2.x, p2.y);
+                            ctx.strokeStyle = `rgba(180, 180, 200, ${config.ghostOpacity})`;
+                            ctx.lineWidth = 0.5;
+                            ctx.stroke();
+                        } else {
+                            ctx.lineTo(p2.x, p2.y);
+                            ctx.strokeStyle = getStrokeColor(p1, pixelData, w); // 색상
+                            let baseWidth = 1.5;
+                            if (config.mode === 'gaussian') baseWidth = 2.0;
+                            if (config.mode === 'quadratic') baseWidth = 1.8;
+                            ctx.lineWidth = Math.max(0.5, baseWidth - (dist / 10));
+                            ctx.stroke();
+                        }
+                        currentIndex++;
+                    }
+                }
+                animationId = requestAnimationFrame(drawFrame);
+            }
+            drawFrame();
+        }
+
+
+        function updateStats(strokes) {
+            // [FIX] Check for null statsEl
+            if (!statsEl) return;
+
+            let modeText = "가우시안";
+            if (config.mode === 'spline') modeText = "스플라인";
+            if (config.mode === 'quadratic') modeText = "2차 베지에";
+            if (config.mode === 'rectilinear') modeText = "직각";
+            let typeText = "없음";
+            if (currentMediaType === 'image') typeText = "이미지";
+            else if (currentMediaType === 'audio') typeText = "오디오 파형";
+            else if (currentMediaType === 'video') typeText = "동영상 (Live)";
+            let instantText = config.instant ? " (즉시)" : "";
+            if (currentMediaType === 'video') instantText = " (실시간)";
+            statsEl.innerHTML = `소스: ${typeText} | 포인트: ${smoothedPoints.length}개<br>
+            <span class="text-[10px] text-gray-500">모드: ${modeText} | 강도: ${config.smoothness}${instantText} | 강조 영역: ${focusZones.length}개</span>`;
+        }
+        updateUIForMode();
+        updateColorUI();
+        if (statsEl) statsEl.innerHTML = "파일을 업로드해주세요.";
+    </script>
+</body>
+
+</html>

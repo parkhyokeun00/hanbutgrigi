@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>한붓그리기 크로키 (Performance Edition)</title>
+    
+    <!-- Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <h1 class="title">🎨 한붓 크로키 
+                <span class="badge">Performance</span>
+            </h1>
+            <p class="subtitle">이미지, 오디오, 동영상을 나만의 색상과 스타일로 표현하세요.</p>
+
+            <!-- File Upload -->
+            <div>
+                <input type="file" id="mediaInput" accept="image/*, audio/*, video/*" class="hidden">
+                <label for="mediaInput" class="btn btn-primary btn-block">
+                    📂 미디어 소스 업로드
+                </label>
+                <p id="fileName" class="text-xs text-center text-gray-400 mt-2">선택된 파일 없음</p>
+            </div>
+
+            <!-- Focus Settings -->
+            <div class="space-y-4 pt-2 border-t">
+                <h2 class="section-title">🔍 디테일 강조 설정</h2>
+                <div class="card">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="label">영역 편집</label>
+                        <button id="toggleFocusBtn" class="btn btn-secondary btn-sm">편집 켜기</button>
+                    </div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="label-sm">가이드 보기</label>
+                        <input type="checkbox" id="showGuidesCheck" checked class="checkbox">
+                    </div>
+                    <p class="text-xs text-gray-500 mb-2">
+                        * 클릭: 추가 (최대 10개)<br>
+                        * 드래그: 이동 / 휠: 크기 조절<br>
+                        * 우클릭: 삭제
+                    </p>
+                    <button id="clearZonesBtn" class="btn btn-danger btn-sm btn-block">
+                        모든 영역 삭제
+                    </button>
+                </div>
+            </div>
+
+            <!-- Line Settings -->
+            <div class="space-y-4 pt-2 border-t">
+                <h2 class="section-title">라인 설정</h2>
+
+                <!-- Detail Slider -->
+                <div class="card">
+                    <label class="label flex justify-between">
+                        <span>상세함 (점 개수)</span>
+                        <span id="detailVal" class="text-indigo font-bold">2500</span>
+                    </label>
+                    <input type="range" id="detailSlider" min="500" max="150000" step="100" value="2500"
+                        class="input-range">
+                </div>
+
+                <!-- Edge Mode -->
+                <div class="card">
+                    <label class="label mb-2">엣지 검출 방식</label>
+                    <select id="edgeModeSelect" class="select">
+                        <option value="basic">기본 (Basic)</option>
+                        <option value="sobel">Sobel 필터 (정밀)</option>
+                        <option value="sobel_fine">Sobel 초정밀 (Finest)</option>
+                    </select>
+                    <p class="text-xs text-gray-400 mt-1">* Sobel: 더 정확한 윤곽선 검출</p>
+                </div>
+
+                <!-- Draw Style -->
+                <div class="card">
+                    <label class="label mb-2">그리기 스타일</label>
+                    <select id="drawStyleSelect" class="select">
+                        <option value="standard">기본 (Standard)</option>
+                        <option value="watercolor">수채화 (Watercolor)</option>
+                        <option value="drawing">그리기 (Sketch)</option>
+                        <option value="realistic">사실적인 (Realistic)</option>
+                    </select>
+                </div>
+
+                <!-- Watercolor Options -->
+                <div id="watercolorOptions" class="card card-watercolor hidden">
+                    <h3 class="text-xs font-bold text-indigo mb-3">🎨 수채화 옵션</h3>
+
+                    <!-- Brush Settings -->
+                    <p class="text-xs text-gray-400 mb-2 border-b pb-1">🖌️ 브러시</p>
+                    <div class="space-y-2 mb-3">
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>붓 크기</span>
+                                <span id="wcBrushSizeVal" class="text-indigo">4</span>
+                            </label>
+                            <input type="range" id="wcBrushSize" min="1" max="20" value="4" class="input-range">
+                        </div>
+
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>물 양</span>
+                                <span id="wcWaterVal" class="text-indigo">2.0</span>
+                            </label>
+                            <input type="range" id="wcWater" min="0.5" max="5" step="0.1" value="2.0" class="input-range">
+                        </div>
+
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>안료 농도</span>
+                                <span id="wcPigmentVal" class="text-indigo">0.15</span>
+                            </label>
+                            <input type="range" id="wcPigment" min="0.01" max="0.5" step="0.01" value="0.15" class="input-range">
+                        </div>
+                    </div>
+
+                    <!-- Physics Settings -->
+                    <p class="text-xs text-gray-400 mb-2 border-b pb-1">🌊 유체 물리</p>
+                    <div class="space-y-2 mb-3">
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>점성 (Viscosity)</span>
+                                <span id="wcViscosityVal" class="text-indigo">0.05</span>
+                            </label>
+                            <input type="range" id="wcViscosity" min="0" max="0.5" step="0.01" value="0.05" class="input-range">
+                        </div>
+
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>수압 (Pressure)</span>
+                                <span id="wcPressureVal" class="text-indigo">5.0</span>
+                            </label>
+                            <input type="range" id="wcPressure" min="0.5" max="15" step="0.5" value="5.0" class="input-range">
+                        </div>
+
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>증발 속도</span>
+                                <span id="wcEvapVal" class="text-indigo">0.002</span>
+                            </label>
+                            <input type="range" id="wcEvap" min="0.0001" max="0.01" step="0.0001" value="0.002" class="input-range">
+                        </div>
+
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>물리 정밀도</span>
+                                <span id="wcIterVal" class="text-indigo">10</span>
+                            </label>
+                            <input type="range" id="wcIter" min="2" max="30" step="1" value="10" class="input-range">
+                        </div>
+                    </div>
+
+                    <!-- Pigment Behavior -->
+                    <p class="text-xs text-gray-400 mb-2 border-b pb-1">🧪 안료 거동</p>
+                    <div class="space-y-2 mb-3">
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>흡착력 (Adhesion)</span>
+                                <span id="wcAdhesionVal" class="text-indigo">0.05</span>
+                            </label>
+                            <input type="range" id="wcAdhesion" min="0.001" max="0.3" step="0.001" value="0.05" class="input-range">
+                        </div>
+
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>과립화 (Granulation)</span>
+                                <span id="wcGranularityVal" class="text-indigo">0.8</span>
+                            </label>
+                            <input type="range" id="wcGranularity" min="0" max="2" step="0.1" value="0.8" class="input-range">
+                        </div>
+                    </div>
+
+                    <!-- Resolution -->
+                    <p class="text-xs text-gray-400 mb-2 border-b pb-1">📐 렌더링</p>
+                    <div class="space-y-2 mb-3">
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>해상도</span>
+                                <span id="wcResolutionVal" class="text-indigo">400</span>
+                            </label>
+                            <input type="range" id="wcResolution" min="200" max="1200" step="100" value="400" class="input-range">
+                            <p class="text-xs text-gray-400 mt-1">높을수록 선명 (성능 ↓)</p>
+                        </div>
+                    </div>
+
+                    <!-- Paper Texture Toggle -->
+                    <div class="flex items-center justify-between pt-2 border-t">
+                        <span class="label-sm">종이 질감 표시</span>
+                        <label class="toggle-container">
+                            <input type="checkbox" id="wcShowTexture" class="toggle-input" checked>
+                            <div class="toggle-switch"></div>
+                        </label>
+                    </div>
+
+                    <p class="text-xs text-gray-400 mt-2">* 변경 시 다시 그리기가 필요합니다</p>
+                </div>
+
+                <!-- Smoothing -->
+                <div class="card">
+                    <div class="mb-2">
+                        <label class="label mb-1">스무딩 방식</label>
+                        <select id="algoSelect" class="select">
+                            <option value="gaussian">가우시안 (부드럽게)</option>
+                            <option value="spline">스플라인 (매끄럽게)</option>
+                            <option value="quadratic">2차 베지에 (곡선)</option>
+                            <option value="rectilinear">직각 (Rectilinear)</option>
+                        </select>
+                    </div>
+                    <label class="label flex justify-between mt-2">
+                        <span id="smoothLabel">강도</span>
+                        <span id="smoothVal" class="text-indigo">3단계</span>
+                    </label>
+                    <input type="range" id="smoothSlider" min="0" max="10" step="1" value="3" class="input-range">
+                    <p class="text-xs text-gray-400 mt-1" id="smoothDesc">* 값이 클수록 선이 단순해집니다.</p>
+                </div>
+
+                <!-- Split Threshold -->
+                <div class="card">
+                    <label class="label flex justify-between">
+                        <span>붓 떼기 임계값</span>
+                        <span id="splitVal" class="text-indigo">150px</span>
+                    </label>
+                    <input type="range" id="splitSlider" min="50" max="500" value="150" class="input-range">
+                </div>
+            </div>
+
+            <!-- Color Settings -->
+            <div class="space-y-4 pt-2 border-t">
+                <h2 class="section-title">색상 & 스타일</h2>
+
+                <!-- Background Color -->
+                <div class="card flex items-center justify-between">
+                    <label class="label">배경색</label>
+                    <div class="flex items-center gap-2">
+                        <input type="color" id="bgColorInput" value="#ffffff" style="width: 2rem; height: 2rem; border: none; cursor: pointer;">
+                        <span id="bgColorHex" class="text-xs text-gray-500">#ffffff</span>
+                    </div>
+                </div>
+
+                <!-- Color Mode -->
+                <div class="card">
+                    <label class="label mb-2">선 색상 모드</label>
+                    <select id="colorModeSelect" class="select mb-3">
+                        <option value="single">단색 (검정/지정)</option>
+                        <option value="original">원본 색상 (소스)</option>
+                        <option value="tritone">트라이톤 (3색 지정)</option>
+                        <option value="palette">커스텀 파레트 (이미지 추출)</option>
+                    </select>
+
+                    <div id="singleColorOptions" class="hidden"></div>
+
+                    <div id="tritoneOptions" class="hidden space-y-2 mt-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs">어두운 톤</span>
+                            <input type="color" id="triShadow" value="#2d3748" style="width: 1.5rem; height: 1.5rem;">
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs">중간 톤</span>
+                            <input type="color" id="triMid" value="#4299e1" style="width: 1.5rem; height: 1.5rem;">
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs">밝은 톤</span>
+                            <input type="color" id="triHigh" value="#fbd38d" style="width: 1.5rem; height: 1.5rem;">
+                        </div>
+                    </div>
+
+                    <div id="paletteOptions" class="hidden mt-2">
+                        <div class="mb-2">
+                            <input type="file" id="paletteImgInput" accept="image/*" class="hidden">
+                            <label for="paletteImgInput" class="btn btn-secondary btn-sm btn-block">
+                                🖼️ 색상 추출용 이미지 업로드
+                            </label>
+                        </div>
+                        <div id="paletteContainer" class="flex flex-wrap gap-2 mt-2" style="min-height: 24px; background: var(--color-gray-50); padding: 0.5rem; border-radius: var(--radius-md); border: 1px dashed var(--color-gray-300);">
+                            <span class="text-xs text-gray-400">이미지를 올리면 색상이 추출됩니다.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ghost Opacity -->
+                <div class="card">
+                    <label class="label flex justify-between">
+                        <span>유령 선 투명도</span>
+                        <span id="ghostVal" class="text-indigo">10%</span>
+                    </label>
+                    <input type="range" id="ghostSlider" min="0" max="100" value="10" class="input-range">
+                </div>
+            </div>
+
+            <!-- Playback Settings -->
+            <div class="space-y-4 pt-2 border-t">
+                <h2 class="section-title">재생 & 렌더링</h2>
+
+                <!-- Video Playback Rate -->
+                <div id="playbackSpeedControl" class="card hidden">
+                    <label class="label flex justify-between">
+                        <span>동영상 재생 속도</span>
+                        <span id="playbackRateVal" class="text-indigo">1.0x</span>
+                    </label>
+                    <input type="range" id="playbackRateSlider" min="0.1" max="2.0" step="0.1" value="1.0" class="input-range">
+                </div>
+
+                <!-- Draw Speed -->
+                <div class="card">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="label">그리기 속도</label>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="instantCheck" class="checkbox">
+                            <label for="instantCheck" class="text-xs text-gray-600 ml-2">즉시 완료</label>
+                        </div>
+                    </div>
+                    <div id="speedControlArea">
+                        <div class="flex justify-between">
+                            <span id="speedVal" class="text-indigo text-xs">보통</span>
+                        </div>
+                        <input type="range" id="speedSlider" min="1" max="50" value="5" class="input-range">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="mt-4 pt-4 border-t" style="padding-bottom: 2.5rem;">
+                <button id="togglePlayBtn" class="btn btn-secondary btn-block mb-2 hidden">
+                    ⏯️ 비디오 재생/정지
+                </button>
+                <div class="flex gap-2 mb-2">
+                    <button id="redrawBtn" class="btn btn-secondary flex-1">
+                        🔄 다시 그리기
+                    </button>
+                    <button id="downloadBtn" class="btn btn-dark flex-1">
+                        💾 저장
+                    </button>
+                </div>
+                <div id="stats" class="text-xs text-gray-400 text-center">
+                    대기 중...
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas Area -->
+        <div class="canvas-container" id="canvasContainer">
+            <canvas id="mainCanvas"></canvas>
+            <canvas id="overlayCanvas"></canvas>
+            <canvas id="hiddenCanvas" class="hidden"></canvas>
+            <canvas id="paletteCanvas" class="hidden"></canvas>
+            <video id="sourceVideo" class="hidden" playsinline loop muted></video>
+
+            <!-- Loading Overlay -->
+            <div id="loadingOverlay" class="loading-overlay hidden">
+                <div class="text-center">
+                    <div class="spinner"></div>
+                    <p id="loadingText" class="text-sm text-gray-600 font-medium">준비 중...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Script (ES Module) -->
+    <script type="module" src="js/main.js"></script>
+</body>
+
+</html>
