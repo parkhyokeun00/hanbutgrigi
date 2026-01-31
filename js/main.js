@@ -544,8 +544,10 @@ function updateSpeedText() {
     if (!elements.speedVal) return;
     if (config.speed <= 3) elements.speedVal.textContent = "느림";
     else if (config.speed <= 15) elements.speedVal.textContent = "보통";
-    else if (config.speed <= 30) elements.speedVal.textContent = "빠름";
-    else elements.speedVal.textContent = "매우 빠름";
+    else if (config.speed <= 50) elements.speedVal.textContent = "빠름";
+    else if (config.speed <= 100) elements.speedVal.textContent = "매우 빠름";
+    else if (config.speed <= 150) elements.speedVal.textContent = "초고속";
+    else elements.speedVal.textContent = "극한 속도 ⚡";
 }
 
 function updateUIForMode() {
