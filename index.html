@@ -89,6 +89,7 @@
                         <option value="standard">기본 (Standard)</option>
                         <option value="watercolor">수채화 (Watercolor)</option>
                         <option value="drawing">그리기 (Sketch)</option>
+                        <option value="reveal_sketch">스케치 리빌 (Reveal Sketch)</option>
                         <option value="realistic">사실적인 (Realistic)</option>
                     </select>
                 </div>
@@ -212,6 +213,85 @@
                     </div>
 
                     <p class="text-xs text-gray-400 mt-2">* 변경 시 다시 그리기가 필요합니다</p>
+                </div>
+
+                <!-- Reveal Sketch Options -->
+                <div id="revealSketchOptions" class="card card-watercolor hidden">
+                    <h3 class="text-xs font-bold text-indigo mb-3">✏️ 스케치 리빌 옵션</h3>
+
+                    <div class="space-y-2 mb-3">
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>리빌 범위</span>
+                                <span id="revealCoverageVal" class="text-indigo">115%</span>
+                            </label>
+                            <input type="range" id="revealCoverage" min="60" max="500" step="5" value="115"
+                                class="input-range">
+                            <p class="text-xs text-gray-400 mt-1">값을 높이면 지나간 자리가 더 빈틈없이 나타납니다.</p>
+                        </div>
+
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>번짐/부드러움</span>
+                                <span id="revealFeatherVal" class="text-indigo">72%</span>
+                            </label>
+                            <input type="range" id="revealFeather" min="20" max="160" step="5" value="72"
+                                class="input-range">
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-2 border-t">
+                        <span class="label-sm">스케치 선 표시</span>
+                        <label class="toggle-container">
+                            <input type="checkbox" id="revealShowSketchLines" class="toggle-input" checked>
+                            <div class="toggle-switch"></div>
+                        </label>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-2">
+                        <span class="label-sm">손 이미지 표시</span>
+                        <label class="toggle-container">
+                            <input type="checkbox" id="revealShowHand" class="toggle-input">
+                            <div class="toggle-switch"></div>
+                        </label>
+                    </div>
+
+                    <div class="mt-2">
+                        <input type="file" id="revealHandInput" accept="image/*" class="hidden">
+                        <label for="revealHandInput" class="btn btn-secondary btn-sm btn-block">
+                            ✋ 손 PNG 업로드
+                        </label>
+                        <p id="revealHandFileName" class="text-xs text-gray-400 mt-1">투명 배경 PNG 권장</p>
+                    </div>
+
+                    <div class="space-y-2 mt-2">
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>손 크기</span>
+                                <span id="revealHandScaleVal" class="text-indigo">42%</span>
+                            </label>
+                            <input type="range" id="revealHandScale" min="10" max="120" step="1" value="42"
+                                class="input-range">
+                        </div>
+
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>펜촉 X 보정</span>
+                                <span id="revealHandOffsetXVal" class="text-indigo">0px</span>
+                            </label>
+                            <input type="range" id="revealHandOffsetX" min="-250" max="250" step="1" value="0"
+                                class="input-range">
+                        </div>
+
+                        <div>
+                            <label class="label-sm flex justify-between">
+                                <span>펜촉 Y 보정</span>
+                                <span id="revealHandOffsetYVal" class="text-indigo">0px</span>
+                            </label>
+                            <input type="range" id="revealHandOffsetY" min="-250" max="250" step="1" value="0"
+                                class="input-range">
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Smoothing -->

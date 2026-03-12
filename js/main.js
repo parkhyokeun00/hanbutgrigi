@@ -21,6 +21,14 @@ const watercolorCanvas = document.createElement('canvas');
 watercolorCanvas.width = 200;
 watercolorCanvas.height = 200;
 const watercolorCtx = watercolorCanvas.getContext('2d');
+const revealSourceCanvas = document.createElement('canvas');
+const revealSourceCtx = revealSourceCanvas.getContext('2d');
+const revealMaskCanvas = document.createElement('canvas');
+const revealMaskCtx = revealMaskCanvas.getContext('2d');
+const revealCompositeCanvas = document.createElement('canvas');
+const revealCompositeCtx = revealCompositeCanvas.getContext('2d');
+const revealSketchCanvas = document.createElement('canvas');
+const revealSketchCtx = revealSketchCanvas.getContext('2d');
 
 const state = {
     originalImage: null,
@@ -33,7 +41,10 @@ const state = {
     videoLoopId: null,
     focusZones: [],
     isFocusEditMode: false,
-    draggedZone: null
+    draggedZone: null,
+    revealHandImage: null,
+    revealHandPose: null,
+    revealHandTargetPose: null
 };
 
 const config = {
@@ -50,7 +61,20 @@ const config = {
     palette: [],
     drawStyle: 'standard',
     edgeMode: 'basic',
-    wcResolution: 400
+    wcResolution: 400,
+    revealBrushSize: 28,
+    revealCoverage: 1.15,
+    revealFeather: 0.72,
+    revealShowSketchLines: true,
+    revealShowHand: false,
+    revealHandScale: 0.42,
+    revealHandOffsetX: 0,
+    revealHandOffsetY: 0,
+    revealHandRotationOffset: 2.38,
+    revealHandMotionSmoothing: 0.18,
+    revealHandMaxStep: 18,
+    revealHandAnchorX: 0.14,
+    revealHandAnchorY: 0.88
 };
 
 // ========================================
@@ -124,6 +148,7 @@ const elements = {
 
     // Watercolor controls
     watercolorOptions: document.getElementById('watercolorOptions'),
+    revealSketchOptions: document.getElementById('revealSketchOptions'),
     wcBrushSize: document.getElementById('wcBrushSize'),
     wcWater: document.getElementById('wcWater'),
     wcPigment: document.getElementById('wcPigment'),
@@ -135,6 +160,20 @@ const elements = {
     wcGranularity: document.getElementById('wcGranularity'),
     wcShowTexture: document.getElementById('wcShowTexture'),
     wcResolution: document.getElementById('wcResolution'),
+    revealCoverage: document.getElementById('revealCoverage'),
+    revealCoverageVal: document.getElementById('revealCoverageVal'),
+    revealFeather: document.getElementById('revealFeather'),
+    revealFeatherVal: document.getElementById('revealFeatherVal'),
+    revealShowSketchLines: document.getElementById('revealShowSketchLines'),
+    revealShowHand: document.getElementById('revealShowHand'),
+    revealHandInput: document.getElementById('revealHandInput'),
+    revealHandFileName: document.getElementById('revealHandFileName'),
+    revealHandScale: document.getElementById('revealHandScale'),
+    revealHandScaleVal: document.getElementById('revealHandScaleVal'),
+    revealHandOffsetX: document.getElementById('revealHandOffsetX'),
+    revealHandOffsetXVal: document.getElementById('revealHandOffsetXVal'),
+    revealHandOffsetY: document.getElementById('revealHandOffsetY'),
+    revealHandOffsetYVal: document.getElementById('revealHandOffsetYVal'),
 
     // Buttons
     redrawBtn: document.getElementById('redrawBtn'),
@@ -212,6 +251,7 @@ function setupEventListeners() {
 
     // Watercolor sliders
     setupWatercolorControls();
+    setupRevealSketchControls();
 
     // Detail slider
     elements.detailSlider?.addEventListener('input', (e) => {
@@ -402,6 +442,55 @@ function setupWatercolorControls() {
     });
 }
 
+function setupRevealSketchControls() {
+    elements.revealCoverage?.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        config.revealCoverage = val / 100;
+        elements.revealCoverageVal.textContent = `${val}%`;
+        if (state.currentMediaType !== 'video' && config.drawStyle === 'reveal_sketch') animatePath();
+    });
+
+    elements.revealFeather?.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        config.revealFeather = val / 100;
+        elements.revealFeatherVal.textContent = `${val}%`;
+        if (state.currentMediaType !== 'video' && config.drawStyle === 'reveal_sketch') animatePath();
+    });
+
+    elements.revealShowSketchLines?.addEventListener('change', (e) => {
+        config.revealShowSketchLines = e.target.checked;
+        if (state.currentMediaType !== 'video' && config.drawStyle === 'reveal_sketch') animatePath();
+    });
+
+    elements.revealShowHand?.addEventListener('change', (e) => {
+        config.revealShowHand = e.target.checked;
+        if (state.currentMediaType !== 'video' && config.drawStyle === 'reveal_sketch') animatePath();
+    });
+
+    elements.revealHandScale?.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        config.revealHandScale = val / 100;
+        elements.revealHandScaleVal.textContent = `${val}%`;
+        if (state.currentMediaType !== 'video' && config.drawStyle === 'reveal_sketch') animatePath();
+    });
+
+    elements.revealHandOffsetX?.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        config.revealHandOffsetX = val;
+        elements.revealHandOffsetXVal.textContent = `${val}px`;
+        if (state.currentMediaType !== 'video' && config.drawStyle === 'reveal_sketch') animatePath();
+    });
+
+    elements.revealHandOffsetY?.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        config.revealHandOffsetY = val;
+        elements.revealHandOffsetYVal.textContent = `${val}px`;
+        if (state.currentMediaType !== 'video' && config.drawStyle === 'reveal_sketch') animatePath();
+    });
+
+    elements.revealHandInput?.addEventListener('change', handleRevealHandUpload);
+}
+
 function setupFocusControls() {
     elements.toggleFocusBtn?.addEventListener('click', () => {
         state.isFocusEditMode = !state.isFocusEditMode;
@@ -590,6 +679,12 @@ function updateWatercolorOptionsVisibility() {
         elements.watercolorOptions?.classList.remove('hidden');
     } else {
         elements.watercolorOptions?.classList.add('hidden');
+    }
+
+    if (config.drawStyle === 'reveal_sketch') {
+        elements.revealSketchOptions?.classList.remove('hidden');
+    } else {
+        elements.revealSketchOptions?.classList.add('hidden');
     }
 }
 
@@ -1101,6 +1196,11 @@ function drawInstantFrame() {
 
     if (!state.smoothedPoints || state.smoothedPoints.length < 2) return;
 
+    if (config.drawStyle === 'reveal_sketch') {
+        drawRevealInstantFrame(w, h);
+        return;
+    }
+
     let pixelData = null;
     if (config.colorMode === 'original' || config.colorMode === 'tritone' || config.colorMode === 'palette') {
         pixelData = elements.hiddenCtx.getImageData(0, 0, w, h).data;
@@ -1167,6 +1267,8 @@ function animatePath() {
             watercolorCanvas.width = targetRes;
             watercolorCanvas.height = targetRes;
         }
+    } else if (config.drawStyle === 'reveal_sketch') {
+        prepareRevealBuffers(w, h);
     }
 
     let pixelData = null;
@@ -1183,7 +1285,10 @@ function animatePath() {
 
     function drawFrame() {
         if (currentIndex >= totalPoints - 1) {
-            updateStats(strokeCount);
+            const finalStrokeCount = config.drawStyle === 'standard'
+                ? strokeCount
+                : countStrokes(state.smoothedPoints);
+            updateStats(finalStrokeCount);
             return;
         }
 
@@ -1191,6 +1296,10 @@ function animatePath() {
 
         if (config.drawStyle === 'watercolor' || config.drawStyle === 'realistic') {
             drawWatercolorFrame(w, h, pixelData, drawSpeed, () => {
+                currentIndex++;
+            });
+        } else if (config.drawStyle === 'reveal_sketch') {
+            drawRevealFrame(w, h, pixelData, drawSpeed, () => {
                 currentIndex++;
             });
         } else if (config.drawStyle === 'drawing') {
@@ -1291,6 +1400,27 @@ function animatePath() {
         }
     }
 
+    function drawRevealFrame(w, h, pixelData, speed, onAdvance) {
+        const revealStepLimit = config.revealShowHand ? Math.min(speed, 3) : speed;
+
+        for (let k = 0; k < revealStepLimit; k++) {
+            if (currentIndex >= totalPoints - 1) break;
+
+            const p1 = state.smoothedPoints[currentIndex];
+            const p2 = state.smoothedPoints[currentIndex + 1];
+            const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+
+            if (dist <= config.splitThreshold) {
+                const color = getStrokeColor(p1, pixelData, w);
+                paintRevealSegment(p1, p2, color);
+            }
+
+            onAdvance();
+        }
+
+        renderRevealComposite(w, h);
+    }
+
     function drawStandardFrame(w, h, pixelData, speed, strokeCount, onUpdate) {
         for (let k = 0; k < speed; k++) {
             if (currentIndex >= totalPoints - 1) break;
@@ -1326,6 +1456,299 @@ function animatePath() {
     }
 
     drawFrame();
+}
+
+function handleRevealHandUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    elements.revealHandFileName.textContent = file.name;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+            state.revealHandImage = createTransparentHandAsset(img);
+            if (state.currentMediaType !== 'video' && config.drawStyle === 'reveal_sketch') animatePath();
+        };
+        img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+function createTransparentHandAsset(source) {
+    const canvas = document.createElement('canvas');
+    canvas.width = source.width;
+    canvas.height = source.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(source, 0, 0);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const bg = sampleCornerBackground(data, canvas.width, canvas.height);
+
+    if (bg.a < 10) {
+        return canvas;
+    }
+
+    const threshold = 34;
+
+    for (let i = 0; i < data.length; i += 4) {
+        const dr = data[i] - bg.r;
+        const dg = data[i + 1] - bg.g;
+        const db = data[i + 2] - bg.b;
+        const distance = Math.sqrt((dr * dr) + (dg * dg) + (db * db));
+
+        if (distance < threshold) {
+            data[i + 3] = 0;
+        } else if (distance < threshold * 1.8) {
+            const alpha = Math.min(255, Math.max(0, ((distance - threshold) / threshold) * 255));
+            data[i + 3] = Math.min(data[i + 3], alpha);
+        }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
+}
+
+function sampleCornerBackground(data, width, height) {
+    const samplePoints = [
+        [2, 2],
+        [Math.max(2, width - 3), 2],
+        [2, Math.max(2, height - 3)],
+        [Math.max(2, width - 3), Math.max(2, height - 3)]
+    ];
+
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let a = 0;
+
+    samplePoints.forEach(([x, y]) => {
+        const idx = (y * width + x) * 4;
+        r += data[idx];
+        g += data[idx + 1];
+        b += data[idx + 2];
+        a += data[idx + 3];
+    });
+
+    return {
+        r: r / samplePoints.length,
+        g: g / samplePoints.length,
+        b: b / samplePoints.length,
+        a: a / samplePoints.length
+    };
+}
+
+function prepareRevealBuffers(w, h) {
+    [revealSourceCanvas, revealMaskCanvas, revealCompositeCanvas, revealSketchCanvas].forEach((canvas) => {
+        canvas.width = w;
+        canvas.height = h;
+    });
+
+    revealSourceCtx.clearRect(0, 0, w, h);
+    revealSourceCtx.save();
+    revealSourceCtx.filter = 'contrast(1.04) saturate(1.03)';
+    revealSourceCtx.drawImage(elements.hiddenCanvas, 0, 0, w, h);
+    revealSourceCtx.restore();
+
+    revealMaskCtx.clearRect(0, 0, w, h);
+    revealSketchCtx.clearRect(0, 0, w, h);
+    state.revealHandPose = null;
+    state.revealHandTargetPose = null;
+}
+
+function paintRevealSegment(p1, p2, color) {
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const dist = Math.max(1, Math.hypot(dx, dy));
+    const radius = config.revealBrushSize * config.revealCoverage;
+    const steps = Math.max(1, Math.ceil(dist / Math.max(5, radius * 0.3)));
+
+    revealMaskCtx.save();
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = p1.x + dx * t;
+        const y = p1.y + dy * t;
+        const featherRadius = radius * (0.55 + config.revealFeather * 0.65);
+        const gradient = revealMaskCtx.createRadialGradient(x, y, radius * 0.18, x, y, featherRadius);
+        gradient.addColorStop(0, 'rgba(255,255,255,0.22)');
+        gradient.addColorStop(0.55, 'rgba(255,255,255,0.14)');
+        gradient.addColorStop(1, 'rgba(255,255,255,0)');
+        revealMaskCtx.fillStyle = gradient;
+        revealMaskCtx.beginPath();
+        revealMaskCtx.arc(x, y, featherRadius, 0, Math.PI * 2);
+        revealMaskCtx.fill();
+    }
+    revealMaskCtx.restore();
+
+    revealSketchCtx.save();
+    revealSketchCtx.globalCompositeOperation = 'multiply';
+    revealSketchCtx.strokeStyle = color;
+    revealSketchCtx.lineCap = 'round';
+    revealSketchCtx.lineJoin = 'round';
+
+    if (config.revealShowSketchLines) {
+        for (let pass = 0; pass < 2; pass++) {
+            const jitter = 1.2 + pass * 0.9;
+            revealSketchCtx.beginPath();
+            revealSketchCtx.moveTo(
+                p1.x + (Math.random() - 0.5) * jitter,
+                p1.y + (Math.random() - 0.5) * jitter
+            );
+            revealSketchCtx.lineTo(
+                p2.x + (Math.random() - 0.5) * jitter,
+                p2.y + (Math.random() - 0.5) * jitter
+            );
+            revealSketchCtx.globalAlpha = pass === 0 ? 0.24 : 0.12;
+            revealSketchCtx.lineWidth = Math.max(0.5, config.revealBrushSize * (pass === 0 ? 0.06 : 0.035));
+            revealSketchCtx.stroke();
+        }
+    }
+
+    revealSketchCtx.restore();
+    updateRevealHandPose(p1, p2);
+}
+
+function renderRevealComposite(w, h) {
+    elements.ctx.fillStyle = config.bgColor;
+    elements.ctx.fillRect(0, 0, w, h);
+
+    revealCompositeCtx.clearRect(0, 0, w, h);
+    revealCompositeCtx.drawImage(revealSourceCanvas, 0, 0, w, h);
+    revealCompositeCtx.globalCompositeOperation = 'destination-in';
+    revealCompositeCtx.drawImage(revealMaskCanvas, 0, 0, w, h);
+    revealCompositeCtx.globalCompositeOperation = 'source-over';
+
+    elements.ctx.drawImage(revealCompositeCanvas, 0, 0, w, h);
+    if (config.revealShowSketchLines) {
+        elements.ctx.save();
+        elements.ctx.globalCompositeOperation = 'multiply';
+        elements.ctx.globalAlpha = 0.9;
+        elements.ctx.drawImage(revealSketchCanvas, 0, 0, w, h);
+        elements.ctx.restore();
+    }
+
+    drawRevealHandOverlay();
+}
+
+function drawRevealInstantFrame(w, h) {
+    prepareRevealBuffers(w, h);
+
+    let pixelData = null;
+    if (config.colorMode === 'original' || config.colorMode === 'tritone' || config.colorMode === 'palette') {
+        pixelData = elements.hiddenCtx.getImageData(0, 0, w, h).data;
+    }
+
+    for (let i = 0; i < state.smoothedPoints.length - 1; i++) {
+        const p1 = state.smoothedPoints[i];
+        const p2 = state.smoothedPoints[i + 1];
+        const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+
+        if (dist <= config.splitThreshold) {
+            paintRevealSegment(p1, p2, getStrokeColor(p1, pixelData, w));
+        }
+    }
+
+    renderRevealComposite(w, h);
+    updateStats(countStrokes(state.smoothedPoints));
+}
+
+function countStrokes(points) {
+    if (!points || points.length < 2) return 0;
+
+    let strokeCount = 1;
+    for (let i = 0; i < points.length - 1; i++) {
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        if (Math.hypot(p2.x - p1.x, p2.y - p1.y) > config.splitThreshold) {
+            strokeCount++;
+        }
+    }
+
+    return strokeCount;
+}
+
+function updateRevealHandPose(p1, p2) {
+    const targetPose = {
+        x: p2.x,
+        y: p2.y,
+        angle: Math.atan2(p2.y - p1.y, p2.x - p1.x) + config.revealHandRotationOffset
+    };
+
+    state.revealHandTargetPose = targetPose;
+
+    if (!state.revealHandPose) {
+        state.revealHandPose = { ...targetPose };
+        return;
+    }
+
+    state.revealHandPose = smoothRevealHandPose(state.revealHandPose, targetPose);
+}
+
+function drawRevealHandOverlay() {
+    if (!config.revealShowHand || !state.revealHandImage || !state.revealHandTargetPose) return;
+
+    if (!state.revealHandPose) {
+        state.revealHandPose = { ...state.revealHandTargetPose };
+    } else {
+        state.revealHandPose = smoothRevealHandPose(state.revealHandPose, state.revealHandTargetPose);
+    }
+
+    const img = state.revealHandImage;
+    const pose = state.revealHandPose;
+    const baseHeight = Math.min(elements.mainCanvas.width, elements.mainCanvas.height) * config.revealHandScale;
+    const aspect = img.width / img.height;
+    const height = baseHeight;
+    const width = height * aspect;
+
+    elements.ctx.save();
+    elements.ctx.translate(pose.x, pose.y);
+    elements.ctx.rotate(pose.angle);
+    elements.ctx.translate(config.revealHandOffsetX, config.revealHandOffsetY);
+    elements.ctx.drawImage(
+        img,
+        -width * config.revealHandAnchorX,
+        -height * config.revealHandAnchorY,
+        width,
+        height
+    );
+    elements.ctx.restore();
+}
+
+function smoothRevealHandPose(currentPose, targetPose) {
+    const smoothing = config.revealHandMotionSmoothing;
+    const dx = targetPose.x - currentPose.x;
+    const dy = targetPose.y - currentPose.y;
+    const distance = Math.hypot(dx, dy);
+    const stepLimit = config.revealHandMaxStep;
+
+    let nextX = currentPose.x + dx * smoothing;
+    let nextY = currentPose.y + dy * smoothing;
+
+    if (distance > stepLimit) {
+        const ratio = stepLimit / distance;
+        nextX = currentPose.x + dx * ratio;
+        nextY = currentPose.y + dy * ratio;
+    }
+
+    return {
+        x: nextX,
+        y: nextY,
+        angle: smoothAngle(currentPose.angle, targetPose.angle, 0.14)
+    };
+}
+
+function smoothAngle(current, target, factor) {
+    const delta = normalizeAngle(target - current);
+    return current + delta * factor;
+}
+
+function normalizeAngle(angle) {
+    let normalized = angle;
+    while (normalized > Math.PI) normalized -= Math.PI * 2;
+    while (normalized < -Math.PI) normalized += Math.PI * 2;
+    return normalized;
 }
 
 function updateStats(strokes) {
